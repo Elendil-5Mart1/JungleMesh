@@ -1,0 +1,15 @@
+@use '../abstracts/variables' as *;
+
+//* Presence dot (online / offline)
+.status {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: $text-muted;
+
+  &--online {
+    background: $online;
+  }
+}

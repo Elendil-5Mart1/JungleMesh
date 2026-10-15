@@ -1,0 +1,122 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Modal window over the view (room settings)
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $space * 2;
+  background: rgba(0, 0, 0, 0.6);
+
+  &__box {
+    display: flex;
+    flex-direction: column;
+    width: min(520px, 100%);
+    max-height: 100%;
+    background: $bg-soft;
+    border: 1px solid $border;
+    border-radius: $radius * 1.5;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $space * 1.5 $space * 2;
+    border-bottom: 1px solid $border;
+  }
+
+  &__close {
+    background: none;
+    border: none;
+    color: $text-muted;
+    font-size: 1.6em;
+    line-height: 1;
+
+    &:hover {
+      color: $text;
+    }
+  }
+
+  &__body {
+    padding: $space * 2;
+    overflow-y: auto;
+    @include thin-scrollbar;
+  }
+
+  &__section + &__section {
+    margin-top: $space * 3;
+  }
+
+  &__section h3 {
+    margin-bottom: $space;
+    font-size: 0.75em;
+    text-transform: uppercase;
+    color: $text-muted;
+  }
+
+  &__inline {
+    display: flex;
+    align-items: center;
+    gap: $space;
+    margin-bottom: $space * 0.5;
+
+    input {
+      @include field;
+      flex: 1;
+      min-width: 0;
+      padding: $space * 0.6;
+    }
+
+    button {
+      padding: $space * 0.6 $space * 1.25;
+      background: $accent;
+      border: none;
+      border-radius: $radius;
+      color: $on-accent;
+
+      &:disabled {
+        opacity: 0.4;
+      }
+    }
+
+    button.modal__danger {
+      background: $danger;
+      color: #fff;
+    }
+  }
+
+  // Standalone red button (outside a form row)
+  &__danger {
+    padding: $space * 0.6 $space * 1.25;
+    background: $danger;
+    border: none;
+    border-radius: $radius;
+    color: #fff;
+  }
+
+  &__grow {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__icon {
+    width: 18px;
+    text-align: center;
+    font-weight: 700;
+    color: $text-muted;
+  }
+
+  &__hint {
+    margin-top: $space * 0.5;
+    color: $text-muted;
+    font-size: 0.8em;
+  }
+}

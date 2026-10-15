@@ -1,0 +1,172 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+$speaking: $accent; // turquoise of the "speaking" indicator
+
+//* Voice channels: participants under the channel, central panel, command bar
+
+// "Speaking" indicator: green ring around the avatar
+.voice-ring {
+  display: inline-flex;
+  border-radius: 50%;
+  position: relative;
+  transition: box-shadow 0.1s;
+
+  // Sharp turquoise ring + glowing halo around the avatar
+  &--speaking {
+    box-shadow:
+      0 0 0 3px $speaking,
+      0 0 14px 3px rgba($speaking, 0.75);
+  }
+}
+
+//& Participants listed under a voice channel (left navigation)
+.voicers {
+  margin: 0 0 $space * 0.5 $space * 3;
+
+  &__user {
+    display: flex;
+    align-items: center;
+    gap: $space;
+    padding: 2px 0;
+    color: $text-muted;
+    font-size: 0.9em;
+  }
+}
+
+//& Central panel of the voice channel
+.voice {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $space * 2;
+  padding: $space * 2;
+  color: $text-muted;
+
+  &__users {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: $space * 3;
+  }
+
+  &__user {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $space;
+    max-width: 96px;
+    color: $text;
+    font-size: 0.9em;
+    text-align: center;
+  }
+
+  &__link {
+    color: $text-muted;
+    font-size: 0.8em;
+
+    &--connected {
+      color: $online;
+    }
+
+    &--failed {
+      color: $danger;
+    }
+  }
+
+  &__controls {
+    display: flex;
+    gap: $space;
+  }
+
+  &__btn {
+    min-width: 44px;
+    padding: $space $space * 1.5;
+    background: $bg-input;
+    border: none;
+    border-radius: $radius;
+    color: $text;
+    font-size: 1.1em;
+
+    &:hover {
+      background: $border;
+    }
+
+    // Microphone muted / deafen active
+    &--off {
+      background: rgba($danger, 0.25);
+      color: $danger;
+    }
+
+    &--join {
+      @include chamfer(8px);
+      background: $online;
+      color: $on-accent;
+      font-size: 1em;
+      font-weight: 600;
+    }
+
+    &--leave {
+      background: $danger;
+    }
+  }
+
+  &__hint {
+    font-size: 0.85em;
+  }
+}
+
+//& "In voice" reminder above my dot (left column)
+.voice-bar {
+  display: flex;
+  align-items: center;
+  gap: $space;
+  padding: $space $space * 1.5;
+  background: $bg;
+  border-top: 1px solid $border;
+  color: $online;
+  font-size: 0.85em;
+
+  &__where {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+//& Animated wave replacing the inside of the bubble when speaking (transparent background: the avatar stays visible behind)
+.voice-wave {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8%;
+  border-radius: 50%;
+
+  &__bar {
+    width: 9%;
+    height: 55%;
+    background: $speaking;
+    border-radius: 99px;
+    // dark outline + halo: the bars stay readable on any image
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.55),
+      0 0 6px rgba($speaking, 0.8);
+    animation: voice-wave 0.55s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes voice-wave {
+  from {
+    transform: scaleY(0.2);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
+}

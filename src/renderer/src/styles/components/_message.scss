@@ -1,0 +1,53 @@
+@use '../abstracts/variables' as *;
+
+//* A message in the conversation: avatar on the left, name + time, then the text
+.message {
+  display: flex;
+  gap: $space * 1.5;
+  padding: $space * 0.25 $space * 2;
+  margin-top: $space * 1.5;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  // Message following another one from the same author: no avatar or header,
+  // but offset by the avatar width to stay aligned
+  &--grouped {
+    margin-top: 0;
+    padding-left: $space * 2 + 40px + $space * 1.5;
+  }
+
+  &__body {
+    flex: 1;
+    min-width: 0; // a long code block scrolls instead of widening the page
+  }
+
+  &__meta {
+    display: flex;
+    align-items: baseline;
+    gap: $space;
+
+    time {
+      font-size: 0.75em;
+      color: $text-muted;
+    }
+  }
+
+  // System message ("X joined the room"): discreet and centered
+  &--system {
+    display: block;
+    margin-top: $space;
+    color: $text-muted;
+    font-size: 0.85em;
+    text-align: center;
+
+    &:hover {
+      background: none;
+    }
+  }
+
+  &__author--me {
+    color: $accent;
+  }
+}

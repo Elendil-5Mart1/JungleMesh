@@ -1,0 +1,49 @@
+@use 'variables' as *;
+
+//* Reusable mixins
+
+// Standard input field
+@mixin field {
+  background: $bg-input;
+  color: $text;
+  border: 1px solid $border;
+  border-radius: $radius;
+  padding: $space;
+  font: inherit;
+
+  &:focus {
+    outline: none;
+    border-color: $accent;
+    box-shadow: 0 0 10px rgba($accent, 0.18);
+  }
+}
+
+// Section label: "// TITLE" in mono, spaced capitals
+@mixin label {
+  font-family: $font-mono;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: $text-dim;
+
+  &::before {
+    content: '// ';
+  }
+}
+
+// Chamfered top-right corner (command areas)
+@mixin chamfer($size: 10px) {
+  clip-path: polygon(0 0, calc(100% - #{$size}) 0, 100% $size, 100% 100%, 0 100%);
+}
+
+// Thin, discreet scrollbar
+@mixin thin-scrollbar {
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: $border;
+    border-radius: 4px;
+  }
+}

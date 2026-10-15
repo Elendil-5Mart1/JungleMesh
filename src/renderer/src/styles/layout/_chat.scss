@@ -1,0 +1,41 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Conversation window: fixed header, scrolling messages, input at the bottom
+.chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: $space;
+    padding: $space * 1.5 $space * 2;
+    border-bottom: 1px solid $border;
+
+    h1 {
+      font-size: 1em;
+    }
+  }
+
+  &__messages {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: $space;
+    @include thin-scrollbar;
+  }
+
+  &__empty {
+    padding: $space * 3 $space * 2 0;
+    color: $text-muted;
+    font-size: 1.2em;
+    font-weight: 600;
+  }
+
+  &__error {
+    padding: 0 $space * 2;
+    color: $danger;
+    font-size: 0.85em;
+  }
+}

@@ -1,0 +1,260 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Home window (profile + rooms + friends)
+.home {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  &--loading {
+    justify-content: center;
+    align-items: center;
+    color: $text-muted;
+  }
+
+  //& Profile
+  &__profile {
+    display: flex;
+    align-items: center;
+    gap: $space * 1.5;
+    padding: $space * 2;
+    background: $bg-deep;
+    // Turquoise line that fades out (signature of the theme)
+    border-bottom: 1px solid transparent;
+    border-image: linear-gradient(90deg, rgba($accent, 0.55), transparent 75%) 1;
+  }
+
+  &__identity {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: $space * 0.25;
+  }
+
+  // Settings gear, at the top right of the profile
+  // Settings gear: a real, isolated button to the right of the profile, in turquoise
+  &__gear {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: $radius;
+    color: $text-muted;
+
+    &:hover {
+      color: $accent;
+      filter: drop-shadow(0 0 6px rgba($accent, 0.6));
+    }
+  }
+
+  &__name {
+    @include field;
+    background: transparent;
+    font-size: 1.15em;
+    font-weight: 600;
+    padding: $space * 0.5;
+
+    &:hover {
+      background: $bg-input;
+    }
+  }
+
+  &__key {
+    align-self: flex-start;
+    background: none;
+    border: none;
+    padding: 0 $space * 0.5;
+    color: $text-muted;
+    font-family: $font-mono;
+    font-size: 0.8em;
+
+    &:hover {
+      color: $text;
+    }
+  }
+
+  // Scrolling area below the profile
+  &__lists {
+    flex: 1;
+    overflow-y: auto;
+    @include thin-scrollbar;
+  }
+
+  //& Collapsible forms (add friend, create room)
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: $space * 0.5;
+    padding: 0 $space $space;
+
+    input {
+      @include field;
+    }
+
+    button {
+      padding: $space * 0.75;
+      background: $accent;
+      border: none;
+      border-radius: $radius;
+      color: $on-accent;
+    }
+  }
+
+  &__error {
+    padding: $space $space * 2 0;
+    color: $danger;
+    font-size: 0.85em;
+  }
+}
+
+//* List (rooms or friends) with its section title
+.list {
+  padding: $space;
+
+  &__title {
+    @include label;
+    display: flex;
+    align-items: center;
+    padding: $space * 0.5 $space;
+  }
+
+  // "+" button to the right of the title
+  &__add {
+    margin-left: auto;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: $text-muted;
+    font-size: 1.4em;
+    line-height: 1;
+
+    &:hover {
+      background: $bg-input;
+      color: $text;
+    }
+  }
+
+  &__empty {
+    padding: $space * 0.5 $space;
+    color: $text-muted;
+    font-size: 0.9em;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: $space;
+    width: 100%;
+    padding: $space * 0.75 $space;
+    background: none;
+    border: none;
+    border-radius: $radius;
+    text-align: left;
+
+    &:hover:not(:disabled) {
+      background: $bg-input;
+    }
+
+    &:disabled {
+      cursor: default;
+      color: $text-muted;
+    }
+
+    // Open window: highlighted, with an accent bar on the left ("on" switch)
+    &--open {
+      background: rgba($accent, 0.18);
+      box-shadow: inset 3px 0 0 $accent;
+      font-weight: 600;
+
+      &:hover:not(:disabled) {
+        background: rgba($accent, 0.26);
+      }
+    }
+  }
+
+  &__hash {
+    width: 10px;
+    color: $text-muted;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  &__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__pending {
+    margin-left: auto;
+    font-size: 0.75em;
+    color: $text-muted;
+  }
+
+  // Unread counter, stuck to the right
+  &__badge {
+    margin-left: auto;
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: $danger;
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+  }
+}
+
+//* Friend requests and room invitations
+.requests {
+  padding: $space;
+  border-bottom: 1px solid $border;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: $space * 0.5;
+    padding: $space * 0.5 $space;
+
+    button {
+      padding: 2px $space;
+      border: none;
+      border-radius: $radius;
+      color: #fff;
+      font-size: 0.85em;
+    }
+  }
+
+  &__name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9em;
+  }
+
+  &__accept {
+    background: $online;
+    color: $on-accent !important;
+  }
+
+  &__decline {
+    background: $danger;
+  }
+}
+
+// Nickname field in the "Invitation received" box
+.requests__input {
+  @include field;
+  width: 100%;
+  margin: $space * 0.5 0;
+}

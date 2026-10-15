@@ -1,0 +1,21 @@
+//* SCSS entry point: order matters (base → layout → components)
+
+//& Base
+@use 'base/reset';
+
+//& Layout (one view per window type)
+@use 'layout/frame';
+@use 'layout/home';
+@use 'layout/chat';
+@use 'layout/room';
+@use 'layout/settings';
+
+//& Components
+@use 'components/status';
+@use 'components/avatar';
+@use 'components/message';
+@use 'components/markdown';
+@use 'components/composer';
+@use 'components/toggle';
+@use 'components/modal';
+@use 'components/voice';

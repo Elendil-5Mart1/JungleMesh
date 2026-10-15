@@ -1,0 +1,33 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not paste your invite code, public key or any private message. For security issues see SECURITY.md."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: JungleMesh version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Messages, Rooms, Voice, Invite link, Installer, Interface, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: network
+    attributes:
+      label: Network (for connection or voice problems)
+      description: "Home, corporate or mobile network? VPN? Behind CGNAT?"
