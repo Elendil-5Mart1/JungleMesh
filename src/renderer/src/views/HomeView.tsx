@@ -118,6 +118,7 @@ export const HomeView = () => {
         />
         <div className="home__identity">
           <input
+            key={me.name} // re-reads the name when it changes elsewhere (e.g. from the welcome screen)
             className="home__name"
             defaultValue={me.name}
             onBlur={(e) => void window.api.setName(e.target.value)}
