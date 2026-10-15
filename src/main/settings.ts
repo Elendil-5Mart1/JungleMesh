@@ -24,7 +24,8 @@ const DEFAULTS: AppSettings = {
   turnUser: '',
   turnPass: '',
   hideNotificationContent: false,
-  contentProtection: false
+  contentProtection: false,
+  autoUpdate: true
 }
 
 // A relay is only written turn:… or turns:… (nothing else is accepted, even in a hand-edited file)
@@ -68,6 +69,7 @@ export const createSettings = (onChange: (settings: AppSettings) => void) => {
     if (typeof (saved as { turnPassEnc?: unknown }).turnPassEnc === 'string') encryptedPass = (saved as { turnPassEnc: string }).turnPassEnc
     if (typeof saved.hideNotificationContent === 'boolean') current.hideNotificationContent = saved.hideNotificationContent
     if (typeof saved.contentProtection === 'boolean') current.contentProtection = saved.contentProtection
+    if (typeof saved.autoUpdate === 'boolean') current.autoUpdate = saved.autoUpdate
   } catch {
     // no file yet: default values
   }
@@ -114,6 +116,7 @@ export const createSettings = (onChange: (settings: AppSettings) => void) => {
       }
       if (typeof patch.hideNotificationContent === 'boolean') current.hideNotificationContent = patch.hideNotificationContent
       if (typeof patch.contentProtection === 'boolean') current.contentProtection = patch.contentProtection
+      if (typeof patch.autoUpdate === 'boolean') current.autoUpdate = patch.autoUpdate
       unlock()
       save()
       applyAutostart()

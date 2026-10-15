@@ -9,6 +9,7 @@ export interface Me {
   publicKey: string // hex public key = the user's unique identifier
   inviteCode: string // the same key in base32, to share in order to be added
   name: string
+  named: boolean // false until the user has chosen a display name (shows the welcome screen)
   avatar: Avatar
 }
 
@@ -94,6 +95,7 @@ export interface AppSettings {
   turnPass: string
   hideNotificationContent: boolean // Windows toasts without the message text
   contentProtection: boolean // windows do not appear in screenshots / screen sharing
+  autoUpdate: boolean // look for new versions on GitHub (it sees our IP); nothing is installed without asking
 }
 
 // WebRTC signal (offer, answer, ICE candidate) received from another member of the voice channel
@@ -141,6 +143,9 @@ export interface ChatApi {
   openSettings: () => Promise<void>
   // After confirmation: starts from scratch. 'identity' = new key (we keep name, avatar, settings); 'all' = erase everything
   resetData: (mode: 'identity' | 'all') => Promise<void>
+  // Encrypted identity backup. false = the user cancelled the file dialog; wrong passphrase / bad file → throws
+  exportBackup: (passphrase: string) => Promise<boolean>
+  importBackup: (passphrase: string) => Promise<boolean>
   onSettings: (cb: (settings: AppSettings) => void) => () => void
   onState: (cb: (state: CoreState) => void) => () => void
   onMessage: (cb: (convId: string, msg: ChatMessage) => void) => () => void

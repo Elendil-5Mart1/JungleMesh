@@ -10,6 +10,7 @@
 //   offline is delivered automatically on their next connection.
 // Group rooms (step 4) follow the same principle with N people: see rooms.ts.
 import { EventEmitter } from 'node:events'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -67,7 +68,8 @@ export class P2PCore extends EventEmitter {
   private store!: any // Corestore: manages all the Hypercores on disk
   private swarm!: any
   private publicKey = ''
-  private name = 'Anonyme'
+  private name = 'Anonymous'
+  private named = false // a display name was chosen (profile.json)
   private avatar: Avatar = null
   private avatars = new Map<string, string>() // cache: a peer's key → their avatar (avatars.json)
 
@@ -90,8 +92,15 @@ export class P2PCore extends EventEmitter {
   //& Startup
   async start(): Promise<void> {
     await mkdir(this.dataDir, { recursive: true })
-    this.store = new Corestore(join(this.dataDir, 'corestore'))
+    // After an import (see backup.ts): restore.key holds the master key to give the new Corestore
+    const restoreKey = join(this.dataDir, 'restore.key')
+    const restored = existsSync(restoreKey) ? b4a.from(readFileSync(restoreKey, 'utf8').trim(), 'hex') : null
+    this.store = new Corestore(
+      join(this.dataDir, 'corestore'),
+      restored?.length === 32 ? { primaryKey: restored, unsafe: true } : {}
+    )
     await this.store.ready()
+    if (restored) rmSync(restoreKey, { force: true }) // the key now lives in the Corestore, as for any identity
 
     // The identity is derived from the Corestore master key:
     // a single secret on disk, generated on first launch.
@@ -99,7 +108,10 @@ export class P2PCore extends EventEmitter {
     this.publicKey = b4a.toString(keyPair.publicKey, 'hex')
 
     const profile = await this.loadJson<{ name?: string; avatar?: Avatar }>('profile.json', {})
-    if (profile.name) this.name = profile.name
+    if (profile.name) {
+      this.name = profile.name
+      this.named = true
+    }
     this.avatar = cleanAvatar(profile.avatar) ?? null
     for (const [key, avatar] of Object.entries(await this.loadJson<Record<string, string>>('avatars.json', {}))) {
       if (cleanAvatar(avatar)) this.avatars.set(key, avatar)
@@ -190,6 +202,11 @@ export class P2PCore extends EventEmitter {
     await this.store?.close()
   }
 
+  // Master key (hex) for the identity backup: the only secret that cannot be re-created
+  getPrimaryKey(): string {
+    return b4a.toString(this.store.primaryKey, 'hex')
+  }
+
   //& State sent to the windows
   getState(): CoreState {
     const friends: Friend[] = []
@@ -209,6 +226,7 @@ export class P2PCore extends EventEmitter {
         // Invite code = public key in base32 (52 characters, no 0/O, 1/l ambiguity)
         inviteCode: idEnc.encode(b4a.from(this.publicKey, 'hex')),
         name: this.name,
+        named: this.named,
         avatar: this.avatar
       },
       friends,
@@ -226,7 +244,11 @@ export class P2PCore extends EventEmitter {
 
   //& Actions called from the windows
   async setName(name: string): Promise<void> {
-    this.name = name.trim().slice(0, 32) || this.name
+    const clean = name.trim().slice(0, 32)
+    if (clean) {
+      this.name = clean
+      this.named = true
+    }
     await this.saveProfile()
   }
 

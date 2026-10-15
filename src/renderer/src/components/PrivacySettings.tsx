@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AppSettings } from '../../../shared/types'
+import { BackupPanel } from './BackupPanel'
 import { Toggle } from '@/components/Toggle'
 
 interface Props {
@@ -74,6 +75,18 @@ export const PrivacySettings = ({ settings, onChange }: Props) => {
         <input type="password" value={turn.pass} autoComplete="off" onChange={(e) => setTurn({ ...turn, pass: e.target.value })} onBlur={commit} />
       </div>
       <p className="settings__hint">{t('privacy.turnHint')}</p>
+
+      <h3>{t('privacy.updates')}</h3>
+      <Toggle
+        checked={settings.autoUpdate}
+        onChange={(autoUpdate) => onChange({ autoUpdate })}
+        label={t('privacy.autoUpdate')}
+        hint={t('privacy.autoUpdateHint')}
+      />
+
+      <h3>{t('privacy.backup')}</h3>
+      <p className="settings__hint">{t('privacy.backupIntro')}</p>
+      <BackupPanel />
 
       <h3>{t('privacy.danger')}</h3>
       <div className="settings__field">

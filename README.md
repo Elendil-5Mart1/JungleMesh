@@ -27,6 +27,8 @@ JungleMesh has no telemetry and never talks to a server of ours. Connections and
 - **Stealth mode**: only friends and room members can connect to you; someone who merely has your invite code cannot see you online.
 - **Hide my IP in voice calls**: audio goes through a TURN relay you configure instead of directly to your friends.
 - Hide message text in notifications, hide windows from screen capture, create a new identity, erase all data.
+- **Encrypted backup** of your identity (passphrase-protected file), so losing your computer does not mean losing your friends and rooms.
+- **Update checks** can be turned off: they are the only time the app contacts something other than your peers (GitHub).
 
 For text chat, only a VPN can hide your IP. Data is **not encrypted on disk** by the app: enable your system's disk encryption (BitLocker, FileVault, LUKS) if your computer could be lost or stolen.
 
@@ -37,7 +39,7 @@ Read the full threat model, including what is **not** protected, in [SECURITY.md
 - Without a TURN relay, voice may fail on very restrictive networks ("failed" in the voice panel).
 - Voice channels are limited to 8 people (full mesh).
 - Removing someone from a room is not cryptographic (see SECURITY.md).
-- No automatic updates yet: install the new version over the old one.
+- Updates are offered from GitHub releases (you confirm each step); the installer is not code-signed yet.
 
 ## Develop
 

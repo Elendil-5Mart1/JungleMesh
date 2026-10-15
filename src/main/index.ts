@@ -1,13 +1,23 @@
 //* Entry point of the Electron main process
 import { app, dialog, ipcMain, session, BrowserWindow } from 'electron'
 import { join } from 'node:path'
-import { existsSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { AppSettings, Avatar, ChannelKind, ChatMessage, CoreState } from '../shared/types'
 import { P2PCore } from './p2p/core'
 import { createNotifier, type ConvInfo } from './notifier'
 import { findInviteCode, SCHEME } from './inviteLink'
 import { createSettings } from './settings'
 import { createTray } from './tray'
+import { startUpdater } from './updater'
+import {
+  MIN_PASSPHRASE,
+  IDENTITY_FILES,
+  applyRestore,
+  collectBackup,
+  decryptBackup,
+  encryptBackup,
+  stageRestore
+} from './backup'
 import { setupI18n, t } from '../shared/i18n'
 import { loadSession, saveSession } from './windowState'
 import {
@@ -31,7 +41,7 @@ const reset = process.argv.find((a) => a.startsWith('--reset='))?.split('=')[1]
 if (reset === 'identity' || reset === 'all') {
   const dir = app.getPath('userData')
   // identity: key, contacts, rooms, caches. We keep the profile (name/avatar), settings and window positions.
-  const identity = ['corestore', 'contacts.json', 'rooms.json', 'avatars.json', 'unread.json', 'session.json', 'identity.json']
+  const identity = IDENTITY_FILES
   const keep = reset === 'identity' ? new Set(['profile.json', 'settings.json', 'windowState.json']) : null
   const ours = new Set([...identity, 'profile.json', 'settings.json', 'windowState.json'])
   if (existsSync(dir)) {
@@ -45,6 +55,9 @@ if (reset === 'identity' || reset === 'all') {
     }
   }
 }
+
+//& Import of a backup: the swap happens here too, before the P2P core opens anything
+applyRestore(app.getPath('userData'))
 
 // A single instance per profile (otherwise two P2P cores with the same identity)
 // (app.exit and not app.quit: quit is asynchronous and would let the code carry on)
@@ -251,6 +264,45 @@ ipcMain.handle('data:reset', async (_e, mode: unknown) => {
 // from that point (in screen pixels) and we recompute the window.
 const senderWindow = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): BrowserWindow | null =>
   BrowserWindow.fromWebContents(e.sender)
+//& Identity backup (encrypted file, see backup.ts)
+const BACKUP_FILTER = [{ name: 'JungleMesh backup', extensions: ['jmbackup'] }]
+const checkPassphrase = (p: unknown): string => {
+  if (typeof p !== 'string' || p.length < MIN_PASSPHRASE) throw new Error(t('backup.tooShort', { min: MIN_PASSPHRASE }))
+  return p
+}
+ipcMain.handle('backup:export', async (e, passphrase: unknown) => {
+  const pass = checkPassphrase(passphrase)
+  const win = senderWindow(e)
+  const options = { defaultPath: 'junglemesh.jmbackup', filters: BACKUP_FILTER }
+  const { canceled, filePath } = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+  if (canceled || !filePath) return false
+  writeFileSync(filePath, encryptBackup(collectBackup(app.getPath('userData'), core.getPrimaryKey()), pass))
+  return true
+})
+ipcMain.handle('backup:import', async (e, passphrase: unknown) => {
+  const pass = checkPassphrase(passphrase)
+  const win = senderWindow(e)
+  const options = { properties: ['openFile' as const], filters: BACKUP_FILTER }
+  const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+  if (canceled || !filePaths[0]) return false
+  if (statSync(filePaths[0]).size > 20_000_000) throw new Error(t('backup.invalidFile'))
+  const data = decryptBackup(readFileSync(filePaths[0], 'utf8'), pass) // wrong passphrase or bad file: throws before anything changes
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    buttons: [t('backup.importConfirm'), t('common.cancel')],
+    defaultId: 1,
+    cancelId: 1,
+    message: t('backup.importAsk'),
+    detail: t('backup.importDetail')
+  })
+  if (response !== 0) return false
+  stageRestore(app.getPath('userData'), data)
+  await core.stop()
+  app.relaunch()
+  app.exit(0)
+  return true
+})
+
 ipcMain.on('win:minimize', (e) => senderWindow(e)?.minimize())
 ipcMain.on('win:close', (e) => senderWindow(e)?.close())
 let resizeFrom: Electron.Rectangle | null = null
@@ -332,6 +384,7 @@ app.whenReady().then(async () => {
   if (app.isPackaged) app.setAsDefaultProtocolClient(SCHEME)
   // Launched by a click on a link: the link is in the arguments; otherwise only the home window opens
   if (!receiveLink(process.argv)) openHome()
+  startUpdater(() => settings.get().autoUpdate)
 })
 
 // All windows closed: we do NOT quit, the app stays in the notification area.

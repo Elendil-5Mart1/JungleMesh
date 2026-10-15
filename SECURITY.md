@@ -26,6 +26,8 @@ JungleMesh has no central server, no account, no phone number, no email. Your id
 - There is no moderation and no content filter: you only talk to people you chose. Block or leave to cut contact.
 - Your public key is a stable identifier: people you share it with can recognise you across rooms.
 - Data is stored **unencrypted on disk** in `%APPDATA%\JungleMesh` (use full-disk encryption such as BitLocker). Encrypting the identity key with the OS keychain is planned.
+- **Update checks contact GitHub** (at startup and once a day, if the option is on in Settings › Privacy), so GitHub sees your IP address. The app asks before downloading and before installing anything. Until releases are code-signed, the integrity of an update rests on GitHub and on the SHA-512 listed in the release's `latest.yml`: protect the maintainer account with 2FA, and turn the option off if you prefer to update by hand.
+- **Identity backups** (Settings › Privacy) are encrypted with a passphrase you choose (scrypt + AES-256-GCM). Anyone who has the file *and* the passphrase becomes you: store both carefully. A weak passphrase can be guessed offline.
 - Messages are delivered only between peers that are online at the same time (or on reconnection); there is no server-side storage.
 
 ## Supported versions
