@@ -1,0 +1,60 @@
+//* Icons drawn in code (no image files to manage)
+// Format expected by nativeImage.createFromBitmap: BGRA, colors premultiplied by alpha.
+import { nativeImage, type NativeImage } from 'electron'
+
+interface Disc {
+  cx: number // center and radius, as a fraction of the size (0 → 1)
+  cy: number
+  r: number
+  color: [number, number, number] // RGB
+}
+
+// Draws stacked discs (the last one on top), with soft edges
+const paint = (discs: Disc[], px: number, scale: number): NativeImage => {
+  const buf = Buffer.alloc(px * px * 4)
+  for (let y = 0; y < px; y++) {
+    for (let x = 0; x < px; x++) {
+      let [r, g, b, a] = [0, 0, 0, 0]
+      for (const d of discs) {
+        const dist = Math.hypot(x + 0.5 - d.cx * px, y + 0.5 - d.cy * px)
+        const cover = Math.max(0, Math.min(1, d.r * px - dist + 0.5)) // anti-aliasing
+        // "over" operator: the disc covers what is below according to its coverage
+        r = d.color[0] * cover + r * (1 - cover)
+        g = d.color[1] * cover + g * (1 - cover)
+        b = d.color[2] * cover + b * (1 - cover)
+        a = cover + a * (1 - cover)
+      }
+      const i = (y * px + x) * 4
+      buf[i] = b * a
+      buf[i + 1] = g * a
+      buf[i + 2] = r * a
+      buf[i + 3] = 255 * a
+    }
+  }
+  return nativeImage.createFromBitmap(buf, { width: px, height: px, scaleFactor: scale })
+}
+
+const ACCENT: [number, number, number] = [0x6c, 0x7c, 0xf5] // $accent
+const DANGER: [number, number, number] = [0xed, 0x42, 0x45] // $danger
+const BG: [number, number, number] = [0x1e, 0x1f, 0x24] // $bg
+
+// Unread badge placed on the taskbar buttons
+export const unreadDot = (): NativeImage => paint([{ cx: 0.5, cy: 0.5, r: 0.44, color: DANGER }], 16, 1)
+
+// Notification-area icon: a purple circle, plus a red dot if there are unread messages.
+// Drawn at 32 px with scaleFactor 2 → sharp on 200 % screens.
+export const trayIcon = (hasUnread: boolean): NativeImage =>
+  paint(
+    [
+      { cx: 0.5, cy: 0.5, r: 0.42, color: ACCENT },
+      { cx: 0.5, cy: 0.5, r: 0.16, color: BG }, // a "hole" in the center, ring style
+      ...(hasUnread
+        ? [
+            { cx: 0.76, cy: 0.76, r: 0.24, color: BG }, // dark outline to detach the dot
+            { cx: 0.76, cy: 0.76, r: 0.18, color: DANGER }
+          ]
+        : [])
+    ],
+    32,
+    2
+  )

@@ -1,0 +1,13 @@
+node_modules/
+out/
+dist/
+*.log
+.env
+.DS_Store
+Thumbs.db
+.claude/
+
+# Private notes (not part of the public repository)
+logs.md
+manual.md
+todo.md

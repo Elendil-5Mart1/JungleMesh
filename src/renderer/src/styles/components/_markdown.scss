@@ -1,0 +1,94 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Markdown content of a message
+.md {
+  overflow-wrap: anywhere; // a long URL does not break the layout
+
+  p + p,
+  ul,
+  ol,
+  blockquote,
+  table,
+  pre {
+    margin-top: $space * 0.5;
+  }
+
+  h1,
+  h2,
+  h3 {
+    margin-top: $space;
+    line-height: 1.2;
+  }
+  h1 { font-size: 1.4em; }
+  h2 { font-size: 1.2em; }
+  h3 { font-size: 1.05em; }
+
+  ul,
+  ol {
+    padding-left: $space * 3;
+  }
+
+  // Discord-style quote: a simple bar on the left
+  blockquote {
+    border-left: 4px solid $border;
+    padding-left: $space;
+    color: $text-muted;
+  }
+
+  //& Inline code
+  :not(pre) > code {
+    background: $bg-code;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: $font-mono;
+    font-size: 0.9em;
+  }
+
+  //& Code blocks
+  &__pre {
+    position: relative;
+    background: $bg-code;
+    border: 1px solid $border;
+    border-radius: $radius;
+    overflow: hidden;
+
+    code {
+      display: block;
+      padding: $space * 1.25;
+      overflow-x: auto;
+      font-family: $font-mono;
+      font-size: 0.88em;
+      background: transparent; // overrides the highlight.js theme background
+      @include thin-scrollbar;
+    }
+
+    // The "Copy" button only appears when hovering the block
+    &:hover .md__copy {
+      opacity: 1;
+    }
+  }
+
+  &__copy {
+    position: absolute;
+    top: $space * 0.5;
+    right: $space * 0.5;
+    padding: 2px $space;
+    font-size: 0.75em;
+    background: $bg-input;
+    border: 1px solid $border;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  //& Tables (GFM)
+  table {
+    border-collapse: collapse;
+  }
+  th,
+  td {
+    border: 1px solid $border;
+    padding: 2px $space;
+  }
+}

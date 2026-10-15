@@ -1,0 +1,168 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Settings window: categories on the left, page on the right
+.settings {
+  display: flex;
+  height: 100%;
+
+  &__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 200px;
+    flex-shrink: 0;
+    padding: $space * 2 $space;
+    background: $bg-soft;
+  }
+
+  &__heading {
+    @include label;
+    padding: 0 $space $space;
+  }
+
+  &__tab {
+    padding: $space * 0.75 $space;
+    background: none;
+    border: none;
+    border-radius: $radius;
+    color: $text-muted;
+    text-align: left;
+
+    &:hover {
+      background: $bg-input;
+      color: $text;
+    }
+
+    &--active {
+      background: rgba($accent, 0.18);
+      color: $text;
+    }
+  }
+
+  &__page {
+    flex: 1;
+    min-width: 0;
+    padding: $space * 3 $space * 4;
+    overflow-y: auto;
+    @include thin-scrollbar;
+
+    h2 {
+      margin-bottom: $space * 2;
+    }
+
+    h3 {
+      @include label;
+      margin: $space * 3 0 $space;
+    }
+  }
+
+  &__hint {
+    margin-bottom: $space;
+    color: $text-muted;
+    font-size: 0.85em;
+  }
+
+  &__profile {
+    display: flex;
+    gap: $space * 3;
+    margin-bottom: $space * 3;
+  }
+
+  &__fields {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: $space * 2;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: $space * 0.5;
+
+    > span {
+      font-size: 0.75em;
+      text-transform: uppercase;
+      color: $text-muted;
+    }
+
+    input,
+    select {
+      @include field;
+    }
+  }
+
+  &__button {
+    padding: $space * 0.75 $space * 1.5;
+    background: $bg-input;
+    border: none;
+    border-radius: $radius;
+    color: $text;
+
+    &:hover {
+      background: $border;
+    }
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: $space * 2;
+    color: $text-muted;
+  }
+
+  &__link {
+    background: none;
+    border: none;
+    color: $accent;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  &__code {
+    display: flex;
+    align-items: center;
+    gap: $space;
+
+    code {
+      flex: 1;
+      min-width: 0;
+      padding: $space;
+      background: $bg-code;
+      border-radius: $radius;
+      font-family: $font-mono;
+      font-size: 0.8em;
+      word-break: break-all;
+    }
+
+    button {
+      padding: $space $space * 2;
+      background: $accent;
+      border: none;
+      border-radius: $radius;
+      color: $on-accent;
+    }
+  }
+}
+
+// Level bar of the microphone test
+.meter {
+  flex: 1;
+  height: 8px;
+  background: $bg-input;
+  border-radius: 4px;
+  overflow: hidden;
+
+  &__fill {
+    height: 100%;
+    background: $online;
+    transition: width 0.06s linear;
+  }
+}
+
+.settings__button--danger {
+  color: $danger;
+}

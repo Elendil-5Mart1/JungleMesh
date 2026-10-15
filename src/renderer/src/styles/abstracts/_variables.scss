@@ -1,0 +1,30 @@
+//* Design variables: "sober cyberpunk" theme (mockup: see logs.md)
+// Bluish night, a turquoise for "active / alive", a magenta for "attention".
+
+//& Colors
+$bg-deep: #07090d; // deepest background (fields, code blocks)
+$bg: #0c1017; // panels
+$bg-soft: #121823; // raised elements
+$bg-input: #07090d;
+$bg-code: #06080b;
+$border: #263243; // thin lines
+$line: #1c2531; // discreet separators
+
+$text: #d5dde8;
+$text-muted: #7a8799;
+$text-dim: #4b5768; // section labels
+
+$accent: #1fd1c8; // active, selection, voice
+$accent-bright: #2ff3e6; // halo and voice wave
+$on-accent: #04100f; // text placed on a turquoise background
+$online: $accent;
+$danger: #ff06b5; // attention: unread, leave, errors
+$warn: #ffb454; // creator's crown
+
+//& Typography
+$font: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+$font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+
+//& Spacing / radii: almost square, like on the mockup
+$space: 8px;
+$radius: 2px;

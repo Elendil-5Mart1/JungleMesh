@@ -1,0 +1,20 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Message input area
+.composer {
+  padding: $space $space * 2 $space * 2;
+
+  &__input {
+    @include field;
+    @include thin-scrollbar;
+    @include chamfer(12px);
+    width: 100%;
+    padding: $space * 1.25;
+    resize: none;
+
+    &:disabled {
+      opacity: 0.5;
+    }
+  }
+}

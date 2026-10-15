@@ -1,0 +1,184 @@
+@use '../abstracts/variables' as *;
+
+//* Window without the Windows frame: frame, title bar, chamfered corner, resize handles
+$cut: 18px; // size of the bottom-right chamfer
+
+.frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: $bg;
+  border: 1px solid $border;
+  // Bottom-right corner cut: the desktop shows through (transparent window)
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - #{$cut}), calc(100% - #{$cut}) 100%, 0 100%);
+
+  &__body {
+    flex: 1;
+    min-height: 0; // lets the view scroll instead of pushing the frame
+    display: flex;
+    flex-direction: column;
+
+    > * {
+      flex: 1;
+      min-height: 0;
+    }
+  }
+
+  // Chamfer line: the clip-path cuts the border diagonally, we redraw it identically
+  // (same color, 1 px) so the outline stays in one piece
+  &__corner {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    overflow: visible; // the line sticks out slightly from the square to join the border
+    color: $border;
+  }
+}
+
+//& Title bar: grab it to move the window, the buttons stay clickable
+.titlebar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 32px;
+  padding-left: $space * 1.5;
+  background: $bg; // same background as the window: no separation
+  -webkit-app-region: drag;
+  user-select: none;
+
+  &__logo {
+    width: 8px;
+    height: 8px;
+    margin-right: $space;
+    background: $accent;
+    box-shadow: 0 0 6px $accent;
+    transform: rotate(45deg); // small diamond
+  }
+
+  &__title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: $font-mono;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: $text-muted;
+  }
+
+  // Conversation window: the friend's name replaces the app name
+  &--chat &__title {
+    font-family: $font;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    color: $text;
+  }
+
+  &__buttons {
+    display: flex;
+    height: 100%;
+    -webkit-app-region: no-drag;
+  }
+
+  &__btn {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 100%;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
+    color: $text-muted;
+
+    &:hover {
+      background: $bg-soft;
+      color: $text;
+    }
+
+    // Close: magenta, the "attention" color
+    &--close:hover {
+      background: $danger;
+      color: #fff;
+    }
+  }
+}
+
+//& Invisible handles on the edges and corners
+.grip {
+  position: absolute;
+  z-index: 10;
+  -webkit-app-region: no-drag;
+
+  &--n,
+  &--s {
+    left: 12px;
+    right: 12px;
+    height: 5px;
+    cursor: ns-resize;
+  }
+
+  &--e,
+  &--w {
+    top: 12px;
+    bottom: 12px;
+    width: 5px;
+    cursor: ew-resize;
+  }
+
+  &--n {
+    top: 0;
+  }
+
+  &--s {
+    bottom: 0;
+    right: $cut; // does not overflow onto the chamfer
+  }
+
+  &--e {
+    right: 0;
+    bottom: $cut;
+  }
+
+  &--w {
+    left: 0;
+  }
+
+  &--ne,
+  &--nw,
+  &--se,
+  &--sw {
+    width: 12px;
+    height: 12px;
+  }
+
+  &--ne {
+    top: 0;
+    right: 0;
+    cursor: nesw-resize;
+  }
+
+  &--nw {
+    top: 0;
+    left: 0;
+    cursor: nwse-resize;
+  }
+
+  &--sw {
+    bottom: 0;
+    left: 0;
+    cursor: nesw-resize;
+  }
+
+  &--se {
+    right: $cut;
+    bottom: 0;
+    cursor: nwse-resize;
+  }
+}
