@@ -120,3 +120,45 @@
     font-size: 0.8em;
   }
 }
+
+//* Welcome screen (first launch): name + picture
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $space * 1.5;
+  text-align: center;
+
+  &__intro {
+    color: $text-muted;
+    font-size: 0.9em;
+  }
+
+  &__name {
+    @include field;
+    width: 100%;
+    padding: $space * 0.8;
+    text-align: center;
+  }
+
+  &__start {
+    width: 100%;
+    padding: $space * 0.8;
+    background: $accent;
+    border: none;
+    border-radius: $radius;
+    color: $on-accent;
+
+    &:disabled {
+      opacity: 0.4;
+    }
+  }
+}
+
+.welcome__link {
+  background: none;
+  border: none;
+  color: $text-muted;
+  font-size: 0.85em;
+  text-decoration: underline;
+}

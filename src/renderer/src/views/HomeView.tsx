@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useCoreStore } from '@/stores/useCoreStore'
 import { Avatar } from '@/components/Avatar'
+import { Welcome } from '@/components/Welcome'
 import { Trans, useTranslation } from 'react-i18next'
 import { cleanError } from '@/utils/errors'
 
@@ -103,6 +104,8 @@ export const HomeView = () => {
 
   return (
     <div className="home">
+      {/* First launch: choose a display name and a picture */}
+      {!me.named && <Welcome me={me} />}
       {/*& Profile */}
       <section className="home__profile">
         {/* My avatar: click to choose an image */}

@@ -32,6 +32,8 @@ const api: ChatApi = {
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
   openSettings: () => ipcRenderer.invoke('window:openSettings'),
   resetData: (mode) => ipcRenderer.invoke('data:reset', mode),
+  exportBackup: (passphrase) => ipcRenderer.invoke('backup:export', passphrase),
+  importBackup: (passphrase) => ipcRenderer.invoke('backup:import', passphrase),
   onSettings: (cb) => {
     const listener = (_e: IpcRendererEvent, settings: AppSettings): void => cb(settings)
     ipcRenderer.on('settings:changed', listener)

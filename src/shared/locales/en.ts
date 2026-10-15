@@ -145,6 +145,14 @@ export const en = {
   "window": {
     "minimize": "Minimize"
   },
+  "welcome": {
+    "title": "Welcome to JungleMesh",
+    "intro": "Choose how your friends will see you. You can change this later.",
+    "namePlaceholder": "Display name",
+    "pickPicture": "Click the circle to pick a picture (optional)",
+    "start": "Get started",
+    "haveBackup": "I already have a backup"
+  },
   "avatar": {
     "change": "Change picture",
     "notImage": "This file is not an image"
@@ -181,7 +189,32 @@ export const en = {
     "eraseAllAsk": "Erase all JungleMesh data on this device?",
     "resetDetail": "This cannot be undone. The app will restart.",
     "resetConfirm": "Yes, continue",
+    "autoUpdate": "Check for updates",
+    "autoUpdateHint": "Looks for a new version on GitHub at startup and once a day, so GitHub sees your IP address. Nothing is downloaded or installed without your agreement. Turn off to never contact GitHub.",
+    "updates": "Updates",
+    "backup": "Backup",
+    "backupIntro": "Your identity is a key stored on this computer. If you lose it, your friends and rooms are gone and your invite code stops working. A backup file lets you get it back on this or another computer. It is encrypted with the passphrase you choose: keep both safe, and never share them.",
+    "backupPass": "Passphrase (8 characters or more)",
+    "backupExport": "Save a backup…",
+    "backupImport": "Restore from a backup…",
+    "backupDone": "Backup saved.",
     "turnHint": "A TURN relay is a small server that forwards audio. JungleMesh does not provide one: you can rent one cheaply or run coturn yourself. The relay sees your IP and how much audio you send, never what is said."
+  },
+  "backup": {
+    "tooShort": "The passphrase needs at least {{min}} characters",
+    "wrongPass": "Wrong passphrase, or the file was modified",
+    "invalidFile": "This is not a valid JungleMesh backup",
+    "importAsk": "Restore this backup?",
+    "importDetail": "Your current identity, friends and rooms on this device will be replaced. Messages come back from your friends when they are online. The app will restart.",
+    "importConfirm": "Yes, restore"
+  },
+  "update": {
+    "available": "JungleMesh {{version}} is available",
+    "detail": "Download it now? Nothing is installed until you agree. (Settings › Privacy turns update checks off.)",
+    "download": "Download",
+    "later": "Later",
+    "ready": "The update is ready. Restart JungleMesh to install it?",
+    "restart": "Restart now"
   },
   "chat": {
     "sendTo": "Send a message to {{name}}",
