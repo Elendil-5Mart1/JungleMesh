@@ -11,6 +11,68 @@
     position: relative;
   }
 
+  // Attachments waiting to be sent (above the input, like Discord)
+  &__staged {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $space;
+    padding-bottom: $space;
+  }
+
+  &__chip {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $space * 0.5;
+    width: 112px;
+    padding: $space * 0.5;
+    background: $bg-soft;
+    border: 1px solid $border;
+    border-radius: $radius;
+    font-size: 0.8em;
+
+    img {
+      width: 100%;
+      height: 72px;
+      object-fit: cover;
+    }
+
+    > span[aria-hidden] {
+      display: grid;
+      place-items: center;
+      height: 72px;
+      font-size: 2em;
+    }
+  }
+
+  &__chip-name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__chip-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: rgba($bg-deep, 0.85);
+    border: 1px solid $border;
+    border-radius: 50%;
+    color: $danger;
+    line-height: 1;
+  }
+
+  &__error {
+    padding-bottom: $space * 0.5;
+    color: $danger;
+    font-size: 0.85em;
+  }
+
   &__input {
     @include field;
     @include thin-scrollbar;
@@ -18,7 +80,7 @@
     display: block; // no baseline gap under the textarea (keeps the wrapper exactly as tall as the input)
     width: 100%;
     padding: $space * 1.25;
-    padding-right: $space * 5; // room for the emoji button
+    padding-right: $space * 12.5; // room for the attach, emoji and send buttons
     resize: none;
 
     &:disabled {
@@ -26,10 +88,53 @@
     }
   }
 
+  // Send button (triangle) at the far right of the input, emoji button just before it
+  &__send-btn {
+    position: absolute;
+    right: $space * 1.5;
+    bottom: 0;
+    height: calc(1lh + #{$space * 2.5});
+    align-items: center;
+    padding: 0;
+    font: inherit;
+    background: none;
+    border: none;
+    display: flex;
+    color: $accent;
+
+    &:disabled {
+      opacity: 0.3;
+    }
+
+    &:hover:not(:disabled) {
+      color: $accent-bright;
+    }
+  }
+
+  // Attach button (paperclip), left of the emoji button
+  &__attach-btn {
+    position: absolute;
+    right: $space * 8.5;
+    bottom: 0;
+    height: calc(1lh + #{$space * 2.5});
+    align-items: center;
+    padding: 0;
+    font: inherit;
+    background: none;
+    border: none;
+    display: flex;
+    color: $accent;
+    opacity: 0.65;
+
+    &:hover:not(:disabled) {
+      opacity: 1;
+    }
+  }
+
   // Emoji button inside the input, bottom right
   &__emoji-btn {
     position: absolute;
-    right: $space * 1.5;
+    right: $space * 5;
     bottom: 0;
     height: calc(1lh + #{$space * 2.5}); // = height of a one-line input: the icon stays centred on the first line
     align-items: center;

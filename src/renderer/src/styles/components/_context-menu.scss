@@ -1,0 +1,62 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Right-click menu
+.ctx {
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  max-width: 260px;
+  padding: $space * 0.5;
+  background: $bg-soft;
+  border: 1px solid $border;
+  border-radius: $radius;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+  &__title {
+    padding: $space * 0.5 $space;
+    color: $text-muted;
+    font-size: 0.8em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__sep {
+    height: 1px;
+    margin: $space * 0.5 0;
+    background: $line;
+  }
+
+  &__item {
+    padding: $space * 0.6 $space;
+    background: none;
+    border: none;
+    text-align: left;
+
+    &:hover {
+      background: $bg-input;
+      color: $accent;
+    }
+
+    &--danger:hover {
+      color: $danger;
+    }
+  }
+
+  // Volume slider of a voice participant
+  &__volume {
+    display: flex;
+    flex-direction: column;
+    gap: $space * 0.5;
+    padding: $space * 0.5 $space;
+    font-size: 0.85em;
+
+    input {
+      width: 100%;
+      accent-color: $accent;
+    }
+  }
+}

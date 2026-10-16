@@ -98,7 +98,7 @@ export const createNotifier = (deps: NotifierDeps) => {
       // Conversation windows have no button: the home window is the one that flashes
       const home = getWindow('home')
       if (home && !home.isFocused() && deps.settings().flash) home.flashFrame(true)
-      if (!appFocused() && deps.settings().notifications) notify(conv.title, deps.settings().hideNotificationContent ? t('notif.newMessage') : preview(msg.text), conv.open)
+      if (!appFocused() && deps.settings().notifications) notify(conv.title, deps.settings().hideNotificationContent ? t('notif.newMessage') : preview(msg.file ? `📎 ${msg.file.name}` : msg.text), conv.open)
     },
 
     // A conversation comes to the foreground → its messages are read

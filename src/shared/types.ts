@@ -22,6 +22,8 @@ export interface Friend {
   avatar: Avatar
   status: FriendStatus
   online: boolean
+  callId: string // id of the voice "room" shared with this friend (1-to-1 call)
+  call: string[] // keys of the people in our call right now (me included)
 }
 
 //& Rooms (the equivalent of a Discord server) and their channels
@@ -49,6 +51,7 @@ export interface Room {
   key: string // key of the creator's log = the room's identifier
   name: string
   avatar: Avatar
+  imageTtl?: number // hours before shared images disappear, set by the creator (missing = each member's default)
   status: RoomStatus
   isOwner: boolean
   invitedBy: string // name of the person who invited (received rooms)
@@ -64,6 +67,7 @@ export interface ChatMessage {
   text: string // raw markdown, interpreted at display time
   ts: number
   channel?: string // channel of a room ('general' if missing)
+  file?: { core: string; name: string; size: number; mime: string; image: boolean } // attachment (image or other file)
   system?: boolean // informational message ("X joined the room"), not written by a human
 }
 
@@ -95,6 +99,7 @@ export interface AppSettings {
   turnPass: string
   hideNotificationContent: boolean // Windows toasts without the message text
   contentProtection: boolean // windows do not appear in screenshots / screen sharing
+  imageTtlHours: number // default lifetime of shared images in my conversations (0 = never)
   autoUpdate: boolean // look for new versions on GitHub (it sees our IP); nothing is installed without asking
 }
 
@@ -123,6 +128,15 @@ export interface ChatApi {
   deleteChannel: (roomKey: string, channelId: string) => Promise<void>
   kickFromRoom: (roomKey: string, memberKey: string) => Promise<void>
   leaveRoom: (roomKey: string) => Promise<void>
+  sendFileBytes: (convId: string, name: string, bytes: Uint8Array, channel?: string, text?: string) => Promise<void>
+  deleteMessage: (convId: string, id: string) => Promise<void>
+  onMessageDeleted: (cb: (convId: string, id: string, author: string) => void) => () => void
+  getImage: (coreKey: string) => Promise<string>
+  saveFile: (coreKey: string, name: string) => Promise<boolean>
+  setRoomImageTtl: (roomKey: string, hours: number | null) => Promise<void>
+  onFileProgress: (cb: (coreKey: string, done: number, total: number) => void) => () => void
+  deleteRoom: (roomKey: string) => Promise<void>
+  removeFriend: (key: string) => Promise<void>
   inviteToRoom: (roomKey: string, friendKey: string) => Promise<void>
   acceptRoomInvite: (roomKey: string) => Promise<void>
   declineRoomInvite: (roomKey: string) => Promise<void>

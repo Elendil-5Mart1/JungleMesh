@@ -4,6 +4,7 @@ import type { Room } from '../../../shared/types'
 import { useTranslation } from 'react-i18next'
 import { Avatar } from '@/components/Avatar'
 import { cleanError } from '@/utils/errors'
+import { TTL_CHOICES } from '@/components/PrivacySettings'
 
 interface RoomSettingsProps {
   room: Room
@@ -16,6 +17,7 @@ export const RoomSettings = ({ room, myKey, onClose }: RoomSettingsProps) => {
   const [name, setName] = useState(room.name)
   const [error, setError] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   // Channel being renamed: id → new name typed
   const [renaming, setRenaming] = useState<Record<string, string>>({})
 
@@ -70,6 +72,24 @@ export const RoomSettings = ({ room, myKey, onClose }: RoomSettingsProps) => {
                     {t('roomSettings.save')}
                   </button>
                 </form>
+              </section>
+
+              <section className="modal__section">
+                <h3>{t('roomSettings.imageTtl')}</h3>
+                <select
+                  value={room.imageTtl ?? 'default'}
+                  onChange={(e) =>
+                    void run(() => window.api.setRoomImageTtl(room.key, e.target.value === 'default' ? null : Number(e.target.value)))
+                  }
+                >
+                  <option value="default">{t('roomSettings.imageTtlDefault')}</option>
+                  {TTL_CHOICES.map((hours) => (
+                    <option key={hours} value={hours}>
+                      {t(`ttl.${hours}`)}
+                    </option>
+                  ))}
+                </select>
+                <p className="modal__hint">{t('roomSettings.imageTtlHint')}</p>
               </section>
 
               <section className="modal__section">
@@ -135,6 +155,32 @@ export const RoomSettings = ({ room, myKey, onClose }: RoomSettingsProps) => {
               </p>
             )}
           </section>
+
+          {room.isOwner && (
+            <section className="modal__section">
+              <h3>{t('roomSettings.deleteRoomTitle')}</h3>
+              {confirmDelete ? (
+                <div className="modal__inline">
+                  <span className="modal__grow">{t('roomSettings.deleteRoomAsk', { name: room.name })}</span>
+                  <button
+                    type="button"
+                    className="modal__danger"
+                    onClick={() => void run(() => window.api.deleteRoom(room.key))}
+                  >
+                    {t('roomSettings.deleteRoomYes')}
+                  </button>
+                  <button type="button" onClick={() => setConfirmDelete(false)}>
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="modal__danger" onClick={() => setConfirmDelete(true)}>
+                  {t('roomSettings.deleteRoom')}
+                </button>
+              )}
+              <p className="modal__hint">{t('roomSettings.deleteRoomHint')}</p>
+            </section>
+          )}
 
           {!room.isOwner && (
             <section className="modal__section">

@@ -5,6 +5,9 @@ import type { AppSettings } from '../../../shared/types'
 import { BackupPanel } from './BackupPanel'
 import { Toggle } from '@/components/Toggle'
 
+// Choices offered for the lifetime of shared images (hours; 0 = never)
+export const TTL_CHOICES = [1, 24, 72, 168, 720, 0]
+
 interface Props {
   settings: AppSettings
   onChange: (patch: Partial<AppSettings>) => void
@@ -31,6 +34,22 @@ export const PrivacySettings = ({ settings, onChange }: Props) => {
         label={t('privacy.stealth')}
         hint={t('privacy.stealthHint')}
       />
+
+      <h3>{t('privacy.images')}</h3>
+      <label className="settings__field">
+        {t('privacy.imageTtl')}
+        <select
+          value={settings.imageTtlHours}
+          onChange={(e) => onChange({ imageTtlHours: Number(e.target.value) })}
+        >
+          {TTL_CHOICES.map((hours) => (
+            <option key={hours} value={hours}>
+              {t(`ttl.${hours}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="settings__hint">{t('privacy.imageTtlHint')}</p>
 
       <h3>{t('privacy.appearance')}</h3>
       <Toggle

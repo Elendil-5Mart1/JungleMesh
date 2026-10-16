@@ -73,10 +73,10 @@
     }
 
     button {
+      @include chamfer(8px);
       padding: $space * 0.6 $space * 1.25;
       background: $accent;
       border: none;
-      border-radius: $radius;
       color: $on-accent;
 
       &:disabled {
@@ -142,11 +142,11 @@
   }
 
   &__start {
+    @include chamfer(8px);
     width: 100%;
     padding: $space * 0.8;
     background: $accent;
     border: none;
-    border-radius: $radius;
     color: $on-accent;
 
     &:disabled {

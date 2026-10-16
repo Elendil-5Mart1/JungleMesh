@@ -19,6 +19,8 @@ const api: ChatApi = {
   deleteChannel: (room, id) => ipcRenderer.invoke('rooms:deleteChannel', room, id),
   kickFromRoom: (room, member) => ipcRenderer.invoke('rooms:kick', room, member),
   leaveRoom: (room) => ipcRenderer.invoke('rooms:leave', room),
+  deleteRoom: (room) => ipcRenderer.invoke('rooms:delete', room),
+  removeFriend: (key) => ipcRenderer.invoke('friends:remove', key),
   inviteToRoom: (room, friend) => ipcRenderer.invoke('rooms:invite', room, friend),
   acceptRoomInvite: (room) => ipcRenderer.invoke('rooms:accept', room),
   declineRoomInvite: (room) => ipcRenderer.invoke('rooms:decline', room),
@@ -72,6 +74,21 @@ const api: ChatApi = {
   windowClose: () => ipcRenderer.send('win:close'),
   windowResizeStart: () => ipcRenderer.send('win:resizeStart'),
   windowResize: (edge, dx, dy) => ipcRenderer.send('win:resize', edge, dx, dy),
+  sendFileBytes: (convId, name, bytes, channel, text) => ipcRenderer.invoke('files:sendBytes', convId, name, bytes, channel, text),
+  setRoomImageTtl: (room, hours) => ipcRenderer.invoke('rooms:setImageTtl', room, hours),
+  onFileProgress: (cb) => {
+    const listener = (_e: IpcRendererEvent, key: string, done: number, total: number): void => cb(key, done, total)
+    ipcRenderer.on('files:progress', listener)
+    return () => ipcRenderer.removeListener('files:progress', listener)
+  },
+  deleteMessage: (convId, id) => ipcRenderer.invoke('chat:delete', convId, id),
+  onMessageDeleted: (cb) => {
+    const listener = (_e: IpcRendererEvent, convId: string, id: string, author: string): void => cb(convId, id, author)
+    ipcRenderer.on('chat:deleted', listener)
+    return () => ipcRenderer.removeListener('chat:deleted', listener)
+  },
+  getImage: (coreKey) => ipcRenderer.invoke('files:image', coreKey),
+  saveFile: (coreKey, name) => ipcRenderer.invoke('files:save', coreKey, name),
   voiceJoin: (room, chan) => ipcRenderer.invoke('voice:join', room, chan),
   voiceLeave: () => ipcRenderer.invoke('voice:leave'),
   voiceSignal: (to, room, chan, data) => ipcRenderer.invoke('voice:signal', to, room, chan, data),

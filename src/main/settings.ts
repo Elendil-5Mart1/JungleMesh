@@ -25,12 +25,14 @@ const DEFAULTS: AppSettings = {
   turnPass: '',
   hideNotificationContent: false,
   contentProtection: false,
-  autoUpdate: true
+  autoUpdate: true,
+  imageTtlHours: 72
 }
 
 // A relay is only written turn:… or turns:… (nothing else is accepted, even in a hand-edited file)
 const TURN_URL = /^turns?:[A-Za-z0-9.\-_]+(:\d{1,5})?(\?transport=(udp|tcp))?$/
 const cleanTurn = (v: unknown): string => (typeof v === 'string' && TURN_URL.test(v.trim()) ? v.trim() : '')
+const isHours = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 24 * 365
 const cleanText = (v: unknown): string => (typeof v === 'string' ? v.slice(0, 200) : '')
 
 export const createSettings = (onChange: (settings: AppSettings) => void) => {
@@ -70,6 +72,7 @@ export const createSettings = (onChange: (settings: AppSettings) => void) => {
     if (typeof saved.hideNotificationContent === 'boolean') current.hideNotificationContent = saved.hideNotificationContent
     if (typeof saved.contentProtection === 'boolean') current.contentProtection = saved.contentProtection
     if (typeof saved.autoUpdate === 'boolean') current.autoUpdate = saved.autoUpdate
+    if (isHours(saved.imageTtlHours)) current.imageTtlHours = saved.imageTtlHours
   } catch {
     // no file yet: default values
   }
@@ -117,6 +120,7 @@ export const createSettings = (onChange: (settings: AppSettings) => void) => {
       if (typeof patch.hideNotificationContent === 'boolean') current.hideNotificationContent = patch.hideNotificationContent
       if (typeof patch.contentProtection === 'boolean') current.contentProtection = patch.contentProtection
       if (typeof patch.autoUpdate === 'boolean') current.autoUpdate = patch.autoUpdate
+      if (isHours(patch.imageTtlHours)) current.imageTtlHours = patch.imageTtlHours
       unlock()
       save()
       applyAutostart()

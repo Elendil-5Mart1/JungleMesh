@@ -98,10 +98,10 @@
     }
 
     button {
+      @include chamfer(8px);
       padding: $space * 0.75;
       background: $accent;
       border: none;
-      border-radius: $radius;
       color: $on-accent;
     }
   }

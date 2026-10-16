@@ -50,4 +50,22 @@
   &__author--me {
     color: $accent;
   }
+
+  // Trash button on my own messages, only visible while hovering the message
+  &__delete {
+    align-self: flex-start;
+    padding: $space * 0.25;
+    color: $text-muted;
+    opacity: 0;
+    transition: opacity 0.12s;
+
+    &:hover {
+      color: $danger;
+    }
+  }
+
+  &:hover &__delete,
+  &__delete:focus-visible {
+    opacity: 1;
+  }
 }

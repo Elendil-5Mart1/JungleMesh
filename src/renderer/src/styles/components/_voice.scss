@@ -109,6 +109,7 @@ $speaking: $accent; // turquoise of the "speaking" indicator
     }
 
     &--leave {
+      @include chamfer(8px);
       background: $danger;
     }
   }
@@ -168,5 +169,42 @@ $speaking: $accent; // turquoise of the "speaking" indicator
 
   to {
     transform: scaleY(1);
+  }
+}
+
+//& Call strip at the top of a private conversation
+.callbar {
+  display: flex;
+  align-items: center;
+  gap: $space;
+  justify-content: center; // at the bottom of the conversation, centered
+  padding: 0 $space * 2 $space * 2; // the composer above already has $space * 2 of bottom padding: same gap on both sides
+
+  &--ringing {
+    background: rgba($accent, 0.08);
+  }
+
+  &__who {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: $text-muted;
+    font-size: 0.85em;
+
+    &--speaking {
+      color: $accent-bright;
+    }
+  }
+
+  &__volume {
+    width: 80px;
+    accent-color: $accent;
+  }
+
+  &__error {
+    color: $danger;
+    font-size: 0.8em;
   }
 }

@@ -15,6 +15,7 @@ interface CoreStore extends Partial<CoreState> {
   setState: (state: CoreState) => void
   setHistory: (key: string, list: ChatMessage[]) => void
   addMessage: (key: string, msg: ChatMessage) => void
+  removeMessage: (key: string, id: string, author: string) => void
 }
 
 export const useCoreStore = create<CoreStore>((set) => ({
@@ -34,13 +35,17 @@ export const useCoreStore = create<CoreStore>((set) => ({
       // Sorted by date: after a reconnection, older messages arrive late
       const next = [...list, msg].sort((a, b) => a.ts - b.ts)
       return { messages: { ...s.messages, [key]: next } }
-    })
+    }),
+  // Only the author can delete a message: the author is checked too, an id alone is not enough
+  removeMessage: (key, id, author) =>
+    set((s) => ({ messages: { ...s.messages, [key]: (s.messages[key] ?? []).filter((m) => !(m.id === id && m.from === author)) } }))
 }))
 
 //& Single hook-up to the IPC events (called once when the module loads)
 void window.api.getState().then(useCoreStore.getState().setState)
 window.api.onState(useCoreStore.getState().setState)
 window.api.onMessage(useCoreStore.getState().addMessage)
+window.api.onMessageDeleted((key, id, author) => useCoreStore.getState().removeMessage(key, id, author))
 void window.api.getUnread().then(useCoreStore.getState().setUnread)
 window.api.onUnread(useCoreStore.getState().setUnread)
 void window.api.getSettings().then(useCoreStore.getState().setSettings)

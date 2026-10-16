@@ -2,7 +2,9 @@
 // Each room and each friend opens in its own window.
 import { useEffect, useState, type FormEvent } from 'react'
 import { useCoreStore } from '@/stores/useCoreStore'
+import type { Friend } from '../../../shared/types'
 import { Avatar } from '@/components/Avatar'
+import { ContextMenu, MenuItem, type MenuSpot } from '@/components/ContextMenu'
 import { Welcome } from '@/components/Welcome'
 import { Trans, useTranslation } from 'react-i18next'
 import { cleanError } from '@/utils/errors'
@@ -25,6 +27,7 @@ export const HomeView = () => {
 
   // Collapsible forms: "+" next to the section title
   const [adding, setAdding] = useState<'friend' | 'room' | null>(null)
+  const [menu, setMenu] = useState<{ friend: Friend; spot: MenuSpot } | null>(null) // right-click menu
   const [code, setCode] = useState('')
   const [nickname, setNickname] = useState('')
   const [roomName, setRoomName] = useState('')
@@ -300,15 +303,45 @@ export const HomeView = () => {
               className={`list__item ${openClass(`chat:${f.key}`)}`}
               disabled={f.status !== 'accepted'}
               onClick={() => void window.api.toggleChat(f.key)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setMenu({ friend: f, spot: { x: e.clientX, y: e.clientY } })
+              }}
             >
               <Avatar src={f.avatar} name={f.name} seed={f.key} size={32} status={f.online ? 'online' : 'offline'} />
               <span className="list__name">{f.name}</span>
               {f.status === 'outgoing' && <em className="list__pending">{t('home.pending')}</em>}
+              {f.call.includes(f.key) && <span title={t('call.incoming', { name: f.name })}>🔊</span>}
               <Badge count={unread[f.key]} />
             </button>
           ))}
         </section>
       </div>
+
+      {/* Right click on a friend (also works on a pending request that I sent: it cancels it) */}
+      {menu && (
+        <ContextMenu spot={menu.spot} onClose={() => setMenu(null)}>
+          <div className="ctx__title">{menu.friend.name}</div>
+          {menu.friend.status === 'accepted' && (
+            <MenuItem
+              label={t('menu.openChat')}
+              onSelect={() => {
+                void window.api.openChat(menu.friend.key)
+                setMenu(null)
+              }}
+            />
+          )}
+          <MenuItem
+            danger
+            label={t('menu.removeFriend')}
+            confirmLabel={t('menu.removeFriendConfirm')}
+            onSelect={() => {
+              void run(() => window.api.removeFriend(menu.friend.key))
+              setMenu(null)
+            }}
+          />
+        </ContextMenu>
+      )}
     </div>
   )
 }

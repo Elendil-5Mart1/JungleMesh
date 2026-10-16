@@ -103,7 +103,54 @@ export const en = {
     "leaveAsk": "Leave \"{{name}}\"?",
     "leaveYes": "Yes, leave",
     "leaveRoom": "Leave room",
-    "leaveHint": "The creator will be notified next time they connect."
+    "leaveHint": "The creator will be notified next time they connect.",
+    "imageTtl": "Lifetime of shared images",
+    "imageTtlDefault": "Each member's own setting",
+    "imageTtlHint": "Images disappear from every member's device after this delay. Files are not affected: they are only sent when a member accepts them. A member who already saved an image keeps their copy.",
+    "deleteRoom": "Delete room",
+    "deleteRoomTitle": "Delete this room",
+    "deleteRoomAsk": "Delete \"{{name}}\" for everyone?",
+    "deleteRoomYes": "Yes, delete it",
+    "deleteRoomHint": "The room disappears from every member's app. Messages already received stay on their devices."
+  },
+  "call": {
+    "start": "Call",
+    "join": "Join the call",
+    "incoming": "{{name}} is calling",
+    "offline": "{{name}} is offline"
+  },
+  "message": {
+    "delete": "Delete message",
+    "deleteConfirm": "Click again to delete"
+  },
+  "composer": {
+    "send": "Send",
+    "attach": "Attach a file",
+    "removeFile": "Remove"
+  },
+  "file": {
+    "download": "Download",
+    "accept": "Accept and save…",
+    "loading": "Loading image…",
+    "saved": "Saved",
+    "expired": "Image deleted (its lifetime is over)"
+  },
+  "ttl": {
+    "1": "1 hour",
+    "24": "24 hours",
+    "72": "3 days",
+    "168": "7 days",
+    "720": "30 days",
+    "0": "Never"
+  },
+  "menu": {
+    "openChat": "Send a message",
+    "addFriend": "Add as friend",
+    "removeFriend": "Remove friend",
+    "removeFriendConfirm": "Click again to remove",
+    "kick": "Remove from room",
+    "kickConfirm": "Click again to remove",
+    "volume": "Volume — {{percent}}%"
   },
   "room": {
     "notFound": "Room not found",
@@ -180,6 +227,9 @@ export const en = {
   "privacy": {
     "intro": "JungleMesh is peer-to-peer: there is no server hiding you. Your friends (and members of your rooms) connect to you directly, so they can see your IP address. Text and voice are always encrypted. The options below reduce what is exposed; for full anonymity also use a VPN.",
     "network": "Connections",
+    "images": "Shared images",
+    "imageTtl": "Images disappear after",
+    "imageTtlHint": "Images shared in your conversations are erased from this device after this delay (rooms can override it: the room's creator decides). A file you saved yourself is never touched.",
     "stealth": "Stealth mode",
     "stealthHint": "Only friends and members of your rooms can connect to you. Someone who merely has your invite code cannot see you online, learn your IP or your name. In return, nobody can send you a friend request: you must add their code yourself, and they yours.",
     "voice": "Voice",
@@ -253,6 +303,13 @@ export const en = {
     "invalidCode": "Invalid invite code",
     "ownCode": "This is your own code",
     "notVoiceChannel": "This is not a voice channel",
+    "invalidDelay": "Invalid delay",
+    "fileEmpty": "This file is empty",
+    "fileTooBig": "This file is too big (maximum {{max}} MB)",
+    "fileUnknown": "Unknown file",
+    "fileUnavailable": "The file could not be fetched: the sender may be offline. Try again later.",
+    "fileCorrupt": "The received file does not match what was announced",
+    "fileNotImage": "This is not a displayable image",
     "notAcceptedYet": "This contact hasn't accepted your request yet",
     "notMember": "You are not a member of this room",
     "voiceFull": "This voice channel is full ({{max}} people maximum)"

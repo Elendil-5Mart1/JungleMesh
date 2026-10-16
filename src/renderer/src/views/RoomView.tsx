@@ -11,6 +11,9 @@ import { useTranslation } from 'react-i18next'
 import { cleanError } from '@/utils/errors'
 import { useVoice } from '@/voice/useVoice'
 import { Splitter, useColumnWidth } from '@/components/Splitter'
+import { ContextMenu, MenuItem, type MenuSpot } from '@/components/ContextMenu'
+import { getVoiceVolume, saveVoiceVolume } from '@/utils/voiceVolume'
+import { sendMessage } from '@/utils/sendMessage'
 
 const EMPTY: never[] = [] // stable reference: avoids an infinite re-render with Zustand
 
@@ -33,6 +36,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
   const room = useCoreStore((s) => s.rooms?.find((r) => r.key === roomKey))
   const friends = useCoreStore((s) => s.friends) ?? EMPTY
   const messages = useCoreStore((s) => s.messages[roomKey] ?? EMPTY)
+  const settings = useCoreStore((s) => s.settings)
   const setHistory = useCoreStore((s) => s.setHistory)
 
   const [channelId, setChannelId] = useState(() => loadLastChannel(roomKey))
@@ -40,6 +44,8 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
   const [newChannel, setNewChannel] = useState('')
   const [inviting, setInviting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [menu, setMenu] = useState<{ key: string; spot: MenuSpot } | null>(null) // right click on a person
+  const [volume, setVolume] = useState(1) // volume of the person in the open menu
   const [error, setError] = useState('')
   // Resizable side columns (width remembered)
   const [navWidth, setNavWidth] = useColumnWidth('room:navWidth', 220, 140, 400)
@@ -114,8 +120,8 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
     }
   }
 
-  const send = async (text: string): Promise<void> => {
-    if (!(await run(() => window.api.send(roomKey, text, channel.id)))) throw new Error('send failed') // keeps the text
+  const send = async (text: string, files: File[]): Promise<void> => {
+    if (!(await run(() => sendMessage(roomKey, text, files, channel.id)))) throw new Error('send failed') // keeps the text
   }
 
   const createChannel = async (e: FormEvent): Promise<void> => {
@@ -139,6 +145,19 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
   const pending = friends.filter((f) => room.pendingInvites.includes(f.key))
   const online = room.members.filter((m) => m.online)
   const offline = room.members.filter((m) => !m.online)
+
+  // Right click on a person (member list, voice channel list or voice view)
+  const openMenu = (key: string) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (key !== me?.publicKey) setVolume(getVoiceVolume(key))
+    setMenu({ key, spot: { x: e.clientX, y: e.clientY } })
+  }
+
+  const changeVolume = (key: string, value: number): void => {
+    setVolume(value)
+    saveVoiceVolume(key, value)
+    voice.session.current?.setVolume(key, value)
+  }
 
   // Green ring around the avatar of someone who is speaking (only visible if we are in this channel)
   const renderRing = (key: string, avatar: React.ReactNode) => (
@@ -201,7 +220,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
                 {room.voice[c.id].map((key) => {
                   const a = author(key)
                   return (
-                    <div key={key} className="voicers__user">
+                    <div key={key} className="voicers__user" onContextMenu={openMenu(key)}>
                       {renderRing(key, <Avatar src={a.avatar} name={a.name} seed={key} size={22} />)}
                       <span className="room-nav__name">{a.name}</span>
                     </div>
@@ -329,7 +348,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
                 const inCall = voice.activeChan === channel.id
                 const link = voice.status?.links[key]
                 return (
-                  <div key={key} className="voice__user">
+                  <div key={key} className="voice__user" onContextMenu={openMenu(key)}>
                     {renderRing(key, <Avatar src={a.avatar} name={a.name} seed={key} size={72} />)}
                     <span>{a.name}</span>
                     {inCall && key !== me?.publicKey && (
@@ -385,6 +404,8 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
               myKey={me?.publicKey}
               author={author}
               empty={t('room.channelStart', { name: channel.name })}
+              imageTtlHours={room.imageTtl ?? settings?.imageTtlHours}
+              onDelete={(id) => void run(() => window.api.deleteMessage(roomKey, id))}
             />
             <Composer
               disabled={room.status !== 'joined'}
@@ -392,6 +413,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
                 room.status === 'joined' ? t('room.sendIn', { name: channel.name }) : t('room.enrolling')
               }
               onSend={send}
+              attachable
             />
           </>
         )}
@@ -413,7 +435,11 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
                 {[...list]
                   .sort((a, b) => a.name.localeCompare(b.name))
                   .map((m) => (
-                    <div key={m.key} className={`members__item ${m.online ? '' : 'members__item--offline'}`}>
+                    <div
+                      key={m.key}
+                      className={`members__item ${m.online ? '' : 'members__item--offline'}`}
+                      onContextMenu={openMenu(m.key)}
+                    >
                       {renderRing(
                         m.key,
                         <Avatar
@@ -436,6 +462,66 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
             )
         )}
       </aside>
+
+      {menu && (() => {
+        const person = room.members.find((m) => m.key === menu.key)
+        const name = person?.name ?? menu.key.slice(0, 8)
+        const isMe = menu.key === me?.publicKey
+        const friend = friends.find((f) => f.key === menu.key)
+        // Volume only makes sense for someone in the voice channel I am in
+        const inMyCall = !isMe && !!voice.activeChan && (room.voice[voice.activeChan] ?? []).includes(menu.key)
+        const close = (): void => setMenu(null)
+        return (
+          <ContextMenu spot={menu.spot} onClose={close}>
+            <div className="ctx__title">{name}</div>
+            {inMyCall && (
+              <label className="ctx__volume">
+                {t('menu.volume', { percent: Math.round(volume * 100) })}
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={volume}
+                  onChange={(e) => changeVolume(menu.key, Number(e.target.value))}
+                />
+              </label>
+            )}
+            {!isMe && friend?.status === 'accepted' && (
+              <MenuItem
+                label={t('menu.openChat')}
+                onSelect={() => {
+                  void window.api.openChat(menu.key)
+                  close()
+                }}
+              />
+            )}
+            {!isMe && !friend && (
+              <MenuItem
+                label={t('menu.addFriend')}
+                onSelect={() => {
+                  void window.api.addFriend(menu.key, name).catch((err) => setError(cleanError(err)))
+                  close()
+                }}
+              />
+            )}
+            {room.isOwner && !isMe && !person?.isOwner && (
+              <>
+                <div className="ctx__sep" />
+                <MenuItem
+                  danger
+                  label={t('menu.kick')}
+                  confirmLabel={t('menu.kickConfirm')}
+                  onSelect={() => {
+                    void window.api.kickFromRoom(room.key, menu.key).catch((err) => setError(cleanError(err)))
+                    close()
+                  }}
+                />
+              </>
+            )}
+          </ContextMenu>
+        )
+      })()}
 
       {settingsOpen && <RoomSettings room={room} myKey={me?.publicKey} onClose={() => setSettingsOpen(false)} />}
     </div>

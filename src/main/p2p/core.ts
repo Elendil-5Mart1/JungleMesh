@@ -13,7 +13,7 @@ import { EventEmitter } from 'node:events'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import Hyperswarm from 'hyperswarm'
 import Corestore from 'corestore'
 import Protomux from 'protomux'
@@ -21,7 +21,20 @@ import c from 'compact-encoding'
 import idEnc from 'hypercore-id-encoding'
 import b4a from 'b4a'
 import type { Avatar, ChannelKind, ChatMessage, CoreState, Friend, FriendStatus } from '../../shared/types'
-import { cleanAvatar, MAX_MESSAGE_LENGTH, readMessages, watchJournal, type JournalEntry } from './journal'
+import {
+  cleanAvatar,
+  cleanFileName,
+  MAX_MESSAGE_LENGTH,
+  deletedIds,
+  findOwnMessage,
+  orphanFiles,
+  readMessages,
+  readRaw,
+  watchJournal,
+  type JournalEntry,
+  type SharedFile
+} from './journal'
+import { FileManager } from './files'
 import { RoomManager, type RoomControl, type SavedRoom } from './rooms'
 import { t } from '../../shared/i18n'
 import { VoiceManager, type VoiceControl } from './voice'
@@ -62,6 +75,7 @@ const boundedJson = {
 }
 const MAX_PENDING_REQUESTS = 50 // anti-spam protection for friend requests
 const HEX_KEY = /^[0-9a-f]{64}$/
+const DM_CALL = 'dm' // channel id of a call between two friends (there is only one per pair)
 
 export class P2PCore extends EventEmitter {
   private dataDir: string
@@ -79,6 +93,7 @@ export class P2PCore extends EventEmitter {
   private myCores = new Map<string, any>() // friend → my log for them
   private remoteCores = new Map<string, any>() // friend → their log
   private rooms!: RoomManager
+  private files!: FileManager // shared files and images
   private voice!: VoiceManager // voice channels: presences + WebRTC signaling
   private writes = new Map<string, Promise<void>>() // file → last write in progress
   private stealth = false // stealth mode: only friends and members of our rooms can connect
@@ -100,6 +115,7 @@ export class P2PCore extends EventEmitter {
       restored?.length === 32 ? { primaryKey: restored, unsafe: true } : {}
     )
     await this.store.ready()
+    this.files = new FileManager(this.store, (key, done, total) => this.emit('file-progress', key, done, total))
     if (restored) rmSync(restoreKey, { force: true }) // the key now lives in the Corestore, as for any identity
 
     // The identity is derived from the Corestore master key:
@@ -147,10 +163,11 @@ export class P2PCore extends EventEmitter {
       sendControl: (key, msg) => this.sendControl(key, msg),
       save: (rooms) => this.saveJson('rooms.json', rooms),
       changed: () => this.emitState(),
-      message: (roomKey, msg) => this.emit('message', roomKey, msg)
+      message: (roomKey, msg) => this.emit('message', roomKey, msg),
+      messageDeleted: (roomKey, id, author) => this.deleted(roomKey, id, author)
     })
     this.voice = new VoiceManager({
-      members: (room) => this.rooms.memberKeys(room),
+      members: (room) => this.voiceMembers(room),
       me: () => this.publicKey,
       send: (key, msg) => this.sendControl(key, msg),
       changed: () => this.emitState(),
@@ -212,12 +229,15 @@ export class P2PCore extends EventEmitter {
     const friends: Friend[] = []
     for (const contact of this.contacts.values()) {
       if (contact.status === 'blocked') continue
+      const callId = this.callId(contact.key)
       friends.push({
         key: contact.key,
         name: contact.name,
         avatar: this.avatars.get(contact.key) ?? null,
         status: contact.status,
-        online: contact.status === 'accepted' && this.peers.has(contact.key)
+        online: contact.status === 'accepted' && this.peers.has(contact.key),
+        callId,
+        call: this.voice?.participants(callId)[DM_CALL] ?? []
       })
     }
     return {
@@ -318,6 +338,25 @@ export class P2PCore extends EventEmitter {
     this.emitState()
   }
 
+  // Remove a friend (or cancel a request I sent). The contact becomes 'blocked', like a declined request:
+  // they cannot reappear as a new request, and I can still add them back later with their code.
+  async removeFriend(key: string): Promise<void> {
+    const contact = this.contacts.get(key)
+    if (!contact || (contact.status !== 'accepted' && contact.status !== 'outgoing')) return
+
+    contact.status = 'blocked'
+    contact.remoteCore = null
+    this.swarm.leavePeer(b4a.from(key, 'hex'))
+    this.peers.get(key)?.socket.destroy()
+    // We stop reading their messages; the logs stay on disk, so adding them again brings the history back
+    for (const cores of [this.myCores, this.remoteCores]) {
+      void cores.get(key)?.close().catch(() => {})
+      cores.delete(key)
+    }
+    await this.saveContacts()
+    this.emitState()
+  }
+
   //& Rooms (delegated to the RoomManager)
   createRoom(name: string): Promise<string> {
     return this.rooms.create(name)
@@ -348,8 +387,31 @@ export class P2PCore extends EventEmitter {
   }
 
   //& Voice channels (audio goes through WebRTC in the window; here: presence and signaling)
+  // A call between two friends reuses the voice machinery with a "virtual room" shared by both:
+  // its id is a hash of the two public keys, sorted, so each side computes the same one.
+  private callId(friendKey: string): string {
+    return createHash('sha256')
+      .update([this.publicKey, friendKey].sort().join(':'))
+      .digest('hex')
+  }
+
+  // Friend (accepted) behind a call id, if any
+  private callPeer(callId: string): string | null {
+    for (const c of this.contacts.values()) if (c.status === 'accepted' && this.callId(c.key) === callId) return c.key
+    return null
+  }
+
+  // Who may be in this voice "room": the signed-up members of a room, or me + the friend of a call
+  private voiceMembers(room: string): string[] {
+    const members = this.rooms.memberKeys(room)
+    if (members.length) return members
+    const peer = this.callPeer(room)
+    return peer ? [this.publicKey, peer] : []
+  }
+
   voiceJoin(roomKey: string, channelId: string): void {
-    if (!this.rooms.isVoiceChannel(roomKey, channelId)) throw new Error(t('err.notVoiceChannel'))
+    const isCall = channelId === DM_CALL && !!this.callPeer(roomKey)
+    if (!isCall && !this.rooms.isVoiceChannel(roomKey, channelId)) throw new Error(t('err.notVoiceChannel'))
     this.voice.join(roomKey, channelId)
   }
 
@@ -359,6 +421,10 @@ export class P2PCore extends EventEmitter {
 
   voiceSignal(to: string, roomKey: string, channelId: string, data: unknown): void {
     this.voice.signal(to, roomKey, channelId, data)
+  }
+
+  deleteRoom(roomKey: string): Promise<void> {
+    return this.rooms.deleteRoom(roomKey)
   }
 
   leaveRoom(roomKey: string): Promise<void> {
@@ -388,8 +454,8 @@ export class P2PCore extends EventEmitter {
     return messages.sort((a, b) => a.ts - b.ts)
   }
 
-  async send(convId: string, text: string, channel?: string): Promise<void> {
-    if (this.rooms.has(convId)) return this.rooms.send(convId, text, channel)
+  async send(convId: string, text: string, channel?: string, file?: SharedFile): Promise<void> {
+    if (this.rooms.has(convId)) return this.rooms.send(convId, text, channel, file)
     const friendKey = convId
     const core = this.myCores.get(friendKey)
     if (!core || this.contacts.get(friendKey)?.status !== 'accepted') {
@@ -397,8 +463,77 @@ export class P2PCore extends EventEmitter {
     }
     // We write to our log; replication takes care of delivery,
     // immediately if the friend is connected, otherwise on their next connection.
-    const entry: JournalEntry = { id: randomUUID(), text: text.slice(0, MAX_MESSAGE_LENGTH), ts: Date.now() }
+    const entry: JournalEntry = { id: randomUUID(), text: text.slice(0, MAX_MESSAGE_LENGTH), ts: Date.now(), ...(file && { file }) }
     await core.append(entry)
+  }
+
+  //& Deleting my own messages (a tombstone in my log, see journal.ts)
+  async deleteMessage(convId: string, id: string): Promise<void> {
+    if (this.rooms.has(convId)) return this.rooms.deleteMessage(convId, id)
+    const core = this.myCores.get(convId)
+    if (!core || this.contacts.get(convId)?.status !== 'accepted') throw new Error(t('err.notAcceptedYet'))
+    const own = await findOwnMessage(core, id)
+    if (!own) return
+    await core.append({ type: 'delete', id, ...(own.file && { file: own.file }), ts: Date.now() } satisfies JournalEntry)
+  }
+
+  // A message was deleted by its author: the windows hide it, and its image (if any) is freed from the disk
+  private deleted(convId: string, id: string, author: string): void {
+    this.emit('message-deleted', convId, id, author)
+    void this.flushOrphans()
+  }
+
+  private async flushOrphans(): Promise<void> {
+    for (const key of [...orphanFiles]) {
+      orphanFiles.delete(key)
+      await this.files.release(key).catch(() => {})
+    }
+  }
+
+  //& Files and images (the bytes travel in their own log, see files.ts)
+  async sendFile(convId: string, fileName: string, data: Buffer, channel?: string, text = ''): Promise<void> {
+    const file = await this.files.publish(cleanFileName(fileName), data)
+    await this.send(convId, text, channel, file)
+  }
+
+  readFile(coreKey: string): Promise<Buffer> {
+    return this.files.read(coreKey)
+  }
+
+  imageDataUrl(coreKey: string): Promise<string> {
+    return this.files.imageDataUrl(coreKey)
+  }
+
+  // After a download to the user's disk: the copy kept in the app's own storage is freed
+  releaseFile(coreKey: string): Promise<void> {
+    return this.files.release(coreKey)
+  }
+
+  //& Image lifetime: a shared image disappears after a delay (0 = never).
+  // Rooms: the creator's choice, written in the registry; otherwise (and in DMs) my own default.
+  private imageTtlHours = 72
+  setImageTtl(hours: number): void {
+    this.imageTtlHours = hours
+  }
+
+  // Frees the blocks of the images that have outlived their delay (the windows hide them by the same rule)
+  async purgeExpiredImages(): Promise<void> {
+    const now = Date.now()
+    await this.flushOrphans() // images of messages deleted while we were away
+    const sweep = async (convId: string, hours: number): Promise<void> => {
+      if (hours <= 0) return
+      for (const msg of await this.getHistory(convId)) {
+        if (msg.file?.image && now - Math.min(msg.ts, now) > hours * 3_600_000) await this.files.release(msg.file.core)
+      }
+    }
+    for (const c of this.contacts.values()) if (c.status === 'accepted') await sweep(c.key, this.imageTtlHours)
+    for (const r of this.rooms.getState()) {
+      if (r.status === 'joined') await sweep(r.key, r.imageTtl ?? this.imageTtlHours)
+    }
+  }
+
+  setRoomImageTtl(roomKey: string, hours: number | null): Promise<void> {
+    return this.rooms.setImageTtl(roomKey, hours)
   }
 
   //& Connections
@@ -551,6 +686,7 @@ export class P2PCore extends EventEmitter {
   private watchMessages(core: any, friendKey: string, author: string): void {
     watchJournal(core, async (from) => {
       for (const msg of await readMessages(core, author, from)) this.emit('message', friendKey, msg)
+      for (const id of deletedIds(await readRaw(core, from), author)) this.deleted(friendKey, id, author)
     })
   }
 
@@ -558,7 +694,7 @@ export class P2PCore extends EventEmitter {
   private emitState(): void {
     // Room left or removed during a call: no more voice channel
     const spot = this.voice?.current()
-    if (spot && this.rooms.memberKeys(spot.room).length === 0) this.voice.onRoomGone(spot.room)
+    if (spot && this.voiceMembers(spot.room).length === 0) this.voice.onRoomGone(spot.room)
     this.emit('state', this.getState())
   }
 

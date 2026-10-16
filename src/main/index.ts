@@ -1,9 +1,11 @@
 //* Entry point of the Electron main process
 import { app, dialog, ipcMain, session, BrowserWindow } from 'electron'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { AppSettings, Avatar, ChannelKind, ChatMessage, CoreState } from '../shared/types'
 import { P2PCore } from './p2p/core'
+import { cleanFileName } from './p2p/journal'
 import { createNotifier, type ConvInfo } from './notifier'
 import { findInviteCode, SCHEME } from './inviteLink'
 import { createSettings } from './settings'
@@ -162,8 +164,9 @@ const notifier = createNotifier({
 })
 
 //& Security
-// By default Electron grants ALL web permissions (camera, geolocation, notifications…): we only allow the microphone.
-const grantable = (permission: string): boolean => permission === 'media'
+// By default Electron grants ALL web permissions (camera, geolocation, notifications…): we only allow the microphone
+// and writing to the clipboard ("copy" buttons). Reading the clipboard stays refused.
+const grantable = (permission: string): boolean => permission === 'media' || permission === 'clipboard-sanitized-write'
 const lockPermissions = (): void => {
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(grantable(permission)))
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => grantable(permission))
@@ -209,6 +212,8 @@ ipcMain.handle('rooms:renameChannel', (_e, room: string, id: string, name: strin
 ipcMain.handle('rooms:deleteChannel', (_e, room: string, id: string) => core.deleteChannel(room, id))
 ipcMain.handle('rooms:kick', (_e, room: string, member: string) => core.kickFromRoom(room, member))
 ipcMain.handle('rooms:leave', (_e, room: string) => core.leaveRoom(room))
+ipcMain.handle('rooms:delete', (_e, room: string) => core.deleteRoom(asKey(room)))
+ipcMain.handle('friends:remove', (_e, key: string) => core.removeFriend(asKey(key)))
 ipcMain.handle('rooms:invite', (_e, room: string, friend: string) => core.inviteToRoom(room, friend))
 ipcMain.handle('rooms:accept', (_e, room: string) => core.acceptRoomInvite(room))
 ipcMain.handle('rooms:decline', (_e, room: string) => core.declineRoomInvite(room))
@@ -216,12 +221,37 @@ ipcMain.handle('chat:history', (_e, convId: string) => core.getHistory(asKey(con
 ipcMain.handle('chat:send', (_e, convId: string, text: string, channel?: string) =>
   core.send(asKey(convId), text, channel)
 )
+//& Files and images. The main process does the disk work: the page never sees a path.
+const MAX_FILE_SIZE = 25 * 1024 * 1024
+// Attachment staged in the input (picked, pasted or dropped), sent with the optional text of the message
+ipcMain.handle('files:sendBytes', (_e, convId: string, name: string, bytes: unknown, channel?: string, text?: string) => {
+  if (!(bytes instanceof Uint8Array) || bytes.length > MAX_FILE_SIZE) throw new Error(t('err.fileTooBig', { max: MAX_FILE_SIZE / 1024 / 1024 }))
+  return core.sendFile(asKey(convId), String(name), Buffer.from(bytes), channel, typeof text === 'string' ? text : '')
+})
+ipcMain.handle('chat:delete', (_e, convId: string, id: string) => core.deleteMessage(asKey(convId), String(id).slice(0, 64)))
+core.on('message-deleted', (convId, id, author) => broadcast('chat:deleted', convId, id, author))
+ipcMain.handle('files:image', (_e, coreKey: string) => core.imageDataUrl(asKey(coreKey)))
+// "Download": the user chooses where to save; the file is never opened by the app
+// The transfer only starts AFTER the user accepted and chose the destination; progress goes back to the windows.
+ipcMain.handle('files:save', async (e, coreKey: string, name: string) => {
+  const key = asKey(coreKey)
+  const parent = BrowserWindow.fromWebContents(e.sender) ?? undefined
+  const { canceled, filePath } = await dialog.showSaveDialog(parent!, { defaultPath: cleanFileName(name) })
+  if (canceled || !filePath) return false
+  await writeFile(filePath, await core.readFile(key))
+  void core.releaseFile(key) // the user's copy is the one that counts: we free the app's own storage
+  return true
+})
+ipcMain.handle('rooms:setImageTtl', (_e, room: string, hours: number | null) => core.setRoomImageTtl(asKey(room), hours))
+core.on('file-progress', (key, done, total) => broadcast('files:progress', key, done, total))
+
 // Voice channels: if the window that is calling closes, we leave the channel (otherwise we stay there as a "ghost")
 ipcMain.handle('voice:join', (e, room: string, chan: string) => {
   core.voiceJoin(room, chan)
   e.sender.once('destroyed', () => {
-    const spot = core.getState().rooms.find((r) => r.key === room)?.voice[chan]
-    if (spot?.includes(core.getState().me.publicKey)) core.voiceLeave()
+    const state = core.getState()
+    const spot = state.rooms.find((r) => r.key === room)?.voice[chan] ?? state.friends.find((f) => f.callId === room)?.call
+    if (spot?.includes(state.me.publicKey)) core.voiceLeave()
   })
 })
 ipcMain.handle('voice:leave', () => core.voiceLeave())
@@ -237,6 +267,7 @@ ipcMain.handle('settings:get', () => settings.get())
 ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
   settings.update(patch)
   core.setStealth(settings.get().stealth)
+  core.setImageTtl(settings.get().imageTtlHours)
   // Muting a conversation clears its unread count (otherwise the badge would stay lit)
   for (const key of settings.get().muted) notifier.markRead(key)
 })
@@ -368,7 +399,12 @@ app.whenReady().then(async () => {
   await setupI18n()
   lockPermissions()
   core.setStealth(settings.get().stealth)
+  core.setImageTtl(settings.get().imageTtlHours)
   await core.start()
+  // Shared images that outlived their delay are erased from the disk: at startup, then every 30 minutes
+  const purge = (): void => void core.purgeExpiredImages().catch((err) => console.error('purge failed', err))
+  setTimeout(purge, 20_000)
+  setInterval(purge, 30 * 60_000)
   notifier.onState(core.getState(), true) // requests already present: no notification
   tray = createTray({
     getState: () => core.getState(),

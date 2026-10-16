@@ -2,6 +2,7 @@
 // resize handles. The Electron window no longer has a Windows frame (frame: false).
 import { useEffect, useState, type PointerEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import logo from '@/assets/logo.svg'
 
 // Edges and corners that can be grabbed to resize (n = north, se = south-east…)
 const GRIPS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
@@ -14,6 +15,8 @@ const useDocumentTitle = (): string => {
     if (!el) return
     const observer = new MutationObserver(() => setTitle(document.title))
     observer.observe(el, { childList: true })
+    // A child's effect (ChatView…) runs BEFORE this one: it may already have changed the title
+    setTitle(document.title)
     return () => observer.disconnect()
   }, [])
   return title
@@ -50,7 +53,7 @@ export const WindowFrame = ({ children, kind }: WindowFrameProps) => {
   return (
     <div className="frame">
       <header className={`titlebar ${kind ? `titlebar--${kind}` : ''}`}>
-        {!kind && <span className="titlebar__logo" aria-hidden />}
+        {!kind && <img className="titlebar__logo" src={logo} alt="" aria-hidden />}
         <span className="titlebar__title">{kind === 'room' ? '' : title}</span>
         <div className="titlebar__buttons">
           <button

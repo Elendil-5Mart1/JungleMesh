@@ -49,12 +49,9 @@ $cut: 18px; // size of the bottom-right chamfer
   user-select: none;
 
   &__logo {
-    width: 8px;
-    height: 8px;
+    width: 16px;
+    height: 16px;
     margin-right: $space;
-    background: $accent;
-    box-shadow: 0 0 6px $accent;
-    transform: rotate(45deg); // small diamond
   }
 
   &__title {
@@ -66,8 +63,7 @@ $cut: 18px; // size of the bottom-right chamfer
     font-family: $font-mono;
     font-size: 11px;
     letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: $text-muted;
+    color: $text-muted; // "JungleMesh" is written in camel case, never in capitals
   }
 
   // Conversation window: the friend's name replaces the app name

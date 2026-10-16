@@ -4,6 +4,7 @@
 // The main process is only used to exchange the signaling messages (offer, answer, ICE).
 import type { AppSettings, VoiceSignal } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
+import { getVoiceVolume } from '../utils/voiceVolume'
 
 // STUN servers: they help two PCs behind routers discover their public address.
 // They see NO audio (just "what is my address?"), but they do see our IP. On the same local network, useless.
@@ -157,6 +158,12 @@ export class VoiceSession {
     for (const { audio } of this.links.values()) if (audio) audio.muted = deafened
   }
 
+  // Listening volume of one participant (0 → 1), applied live
+  setVolume(key: string, volume: number): void {
+    const audio = this.links.get(key)?.audio
+    if (audio) audio.volume = Math.min(1, Math.max(0, volume))
+  }
+
   stop(): void {
     if (this.stopped) return
     this.stopped = true
@@ -193,6 +200,7 @@ export class VoiceSession {
       const audio = new Audio()
       audio.srcObject = remote
       audio.muted = this.status.deafened
+      audio.volume = getVoiceVolume(key) // personal volume chosen with the right-click menu
       if (this.prefs.speakerId) void audio.setSinkId(this.prefs.speakerId).catch(() => {})
       void audio.play().catch(() => {})
       link.audio = audio

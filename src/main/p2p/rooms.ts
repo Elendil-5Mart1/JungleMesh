@@ -24,8 +24,14 @@ import {
   readRaw,
   toMessage,
   watchJournal,
-  type JournalEntry
+  deletedIds,
+  findOwnMessage,
+  withoutDeleted,
+  type JournalEntry,
+  type SharedFile
 } from './journal'
+
+const MAX_TTL_HOURS = 24 * 365 // longest image lifetime a creator can set: one year (0 = never)
 
 //& Types
 // Room-related control messages (sent over the Protomux channel between two friends)
@@ -56,6 +62,7 @@ interface Member {
 interface RoomRuntime {
   saved: SavedRoom
   avatar: Avatar
+  imageTtl?: number // hours before shared images disappear (chosen by the creator; missing = each member's default)
   ownerCore: any // registry + creator's messages
   myCore: any | null // my log (= ownerCore if I am the creator)
   members: Map<string, Member>
@@ -79,6 +86,7 @@ export interface RoomHost {
   save: (rooms: SavedRoom[]) => Promise<void>
   changed: () => void
   message: (roomKey: string, msg: ChatMessage) => void
+  messageDeleted: (roomKey: string, id: string, author: string) => void
 }
 
 const HEX_KEY = /^[0-9a-f]{64}$/
@@ -120,10 +128,11 @@ export class RoomManager {
     const me = this.host.me().key
     return [...this.rooms.values()]
       .filter((r) => !r.saved.leaving)
-      .map(({ saved, avatar, members, channels }) => ({
+      .map(({ saved, avatar, imageTtl, members, channels }) => ({
         key: saved.key,
         name: saved.name,
         avatar,
+        imageTtl,
         status: saved.status,
         isOwner: saved.owner === me,
         invitedBy: saved.invitedBy,
@@ -198,6 +207,13 @@ export class RoomManager {
     await rt.ownerCore.append({ type: 'meta', avatar: clean, ts: Date.now() } satisfies JournalEntry)
   }
 
+  // Lifetime of the images shared in the room (creator only): hours, 0 = never, null = back to each member's default
+  async setImageTtl(roomKey: string, hours: number | null): Promise<void> {
+    const rt = this.ownedRoom(roomKey)
+    if (hours !== null && !(Number.isInteger(hours) && hours >= 0 && hours <= MAX_TTL_HOURS)) throw new Error(t('err.invalidDelay'))
+    await rt.ownerCore.append({ type: 'meta', imageTtl: hours, ts: Date.now() } satisfies JournalEntry)
+  }
+
   async createChannel(roomKey: string, name: string, kind: ChannelKind): Promise<void> {
     const rt = this.ownedRoom(roomKey)
     const clean = this.channelName(kind, name)
@@ -246,6 +262,15 @@ export class RoomManager {
     const member = rt.members.get(memberKey)
     if (!member || memberKey === rt.saved.owner) throw new Error(t('err.memberNotFound'))
     await this.removeMember(rt, member, 'kicked')
+  }
+
+  // Delete the room (creator): a last registry entry tells every member's app to forget it.
+  // Like a kick, it cannot erase what members already replicated on their disk.
+  async deleteRoom(roomKey: string): Promise<void> {
+    const rt = this.ownedRoom(roomKey)
+    await rt.ownerCore.append({ type: 'room-delete', ts: Date.now() } satisfies JournalEntry)
+    // The registry watcher drops the room (see applyRegistry); done here too in case it is slow
+    await this.forget(rt)
   }
 
   // Leave a room: we tell the creator through our log, and hide it right away
@@ -299,19 +324,23 @@ export class RoomManager {
   async getHistory(roomKey: string): Promise<ChatMessage[]> {
     const rt = this.rooms.get(roomKey)
     if (!rt?.active) return []
-    const messages = this.ownerEntriesToMessages(rt, await readRaw(rt.ownerCore), 0)
+    const ownerRaws = await readRaw(rt.ownerCore)
+    const messages = withoutDeleted(ownerRaws, this.ownerEntriesToMessages(rt, ownerRaws, 0), rt.saved.owner)
     const others: [string, any][] = [...rt.cores]
     if (rt.myCore && rt.myCore !== rt.ownerCore) others.push([this.host.me().key, rt.myCore])
     for (const [author, core] of others) {
-      for (const raw of await readRaw(core)) {
+      const raws = await readRaw(core)
+      const list: ChatMessage[] = []
+      for (const raw of raws) {
         const msg = toMessage(raw, author)
-        if (msg) messages.push(msg)
+        if (msg) list.push(msg)
       }
+      messages.push(...withoutDeleted(raws, list, author))
     }
     return messages.sort((a, b) => a.ts - b.ts)
   }
 
-  async send(roomKey: string, text: string, channel = GENERAL.id): Promise<void> {
+  async send(roomKey: string, text: string, channel = GENERAL.id, file?: SharedFile): Promise<void> {
     const rt = this.rooms.get(roomKey)
     if (!rt?.myCore || rt.saved.status !== 'joined') {
       throw new Error(t('err.notEnrolledYet'))
@@ -322,9 +351,19 @@ export class RoomManager {
       id: randomUUID(),
       text: text.slice(0, MAX_MESSAGE_LENGTH),
       ts: Date.now(),
-      ...(channel !== GENERAL.id && { channel }) // 'general' is not written (compatibility)
+      ...(channel !== GENERAL.id && { channel }), // 'general' is not written (compatibility)
+      ...(file && { file })
     }
     await rt.myCore.append(entry)
+  }
+
+  // Delete one of MY messages in a room (a tombstone in my own log)
+  async deleteMessage(roomKey: string, id: string): Promise<void> {
+    const rt = this.rooms.get(roomKey)
+    if (!rt?.myCore || rt.saved.status !== 'joined') throw new Error(t('err.notEnrolledYet'))
+    const own = await findOwnMessage(rt.myCore, id)
+    if (!own) return
+    await rt.myCore.append({ type: 'delete', id, ...(own.file && { file: own.file }), ts: Date.now() } satisfies JournalEntry)
   }
 
   //& Control messages received from a friend
@@ -434,7 +473,8 @@ export class RoomManager {
     watchJournal(rt.ownerCore, async (from) => {
       const raws = await readRaw(rt.ownerCore, from)
       await this.applyRegistry(rt, raws)
-      for (const msg of this.ownerEntriesToMessages(rt, raws, from)) this.post(rt, msg)
+      for (const msg of withoutDeleted(raws, this.ownerEntriesToMessages(rt, raws, from), rt.saved.owner)) this.post(rt, msg)
+      for (const id of deletedIds(raws, rt.saved.owner)) this.postDeleted(rt, id, rt.saved.owner)
     })
 
     // The topic = the registry's discoveryKey: only those who know the room can find it
@@ -451,6 +491,7 @@ export class RoomManager {
         type: string
         name: string
         avatar: unknown
+        imageTtl: unknown
         key: string
         core: string
         id: string
@@ -463,6 +504,9 @@ export class RoomManager {
         if (cleanName(entry.name)) rt.saved.name = cleanName(entry.name)
         const avatar = cleanAvatar(entry.avatar)
         if (avatar !== undefined) rt.avatar = avatar
+        if (entry.imageTtl === null) rt.imageTtl = undefined
+        else if (Number.isInteger(entry.imageTtl) && (entry.imageTtl as number) >= 0 && (entry.imageTtl as number) <= MAX_TTL_HOURS)
+          rt.imageTtl = entry.imageTtl as number
         dirty = true
       }
 
@@ -486,6 +530,12 @@ export class RoomManager {
         const id = cleanChannelId(entry.id)
         if (!id || id === GENERAL.id) continue
         dirty = rt.channels.delete(id) || dirty
+      }
+
+      // The creator deleted the room: it disappears from this device
+      if (entry?.type === 'room-delete') {
+        await this.forget(rt)
+        return
       }
 
       if (entry?.type === 'member') {
@@ -589,6 +639,13 @@ export class RoomManager {
     } satisfies JournalEntry)
   }
 
+  private async forget(rt: RoomRuntime): Promise<void> {
+    if (!this.rooms.has(rt.saved.key)) return
+    this.dropRoom(rt)
+    await this.persist()
+    this.host.changed()
+  }
+
   // Forgets the room on this device (the data stays on disk, unreachable from the app)
   private dropRoom(rt: RoomRuntime): void {
     rt.active = false
@@ -613,10 +670,21 @@ export class RoomManager {
   }
 
   private async emitFrom(rt: RoomRuntime, core: any, author: string, from: number): Promise<void> {
-    for (const raw of await readRaw(core, from)) {
+    const raws = await readRaw(core, from)
+    const messages: ChatMessage[] = []
+    for (const raw of raws) {
       const msg = toMessage(raw, author)
-      if (msg) this.post(rt, msg)
+      if (msg) messages.push(msg)
     }
+    for (const msg of withoutDeleted(raws, messages, author)) this.post(rt, msg)
+    for (const id of deletedIds(raws, author)) this.postDeleted(rt, id, author)
+  }
+
+  // A member deleted one of their messages: the windows hide it (same guards as post)
+  private postDeleted(rt: RoomRuntime, id: string, author: string): void {
+    if (this.rooms.get(rt.saved.key) !== rt || rt.saved.leaving) return
+    if (author !== rt.saved.owner && !rt.members.has(author) && author !== this.host.me().key) return
+    this.host.messageDeleted(rt.saved.key, id, author)
   }
 
   // Forwards a message to the windows, unless the room is left / forgotten or the author is no longer a member
