@@ -4,12 +4,18 @@
 
 A **peer-to-peer desktop chat** in the spirit of Discord, with **no central server**: private messages, rooms with text and voice channels, one window per conversation. Everything goes directly between computers (Hyperswarm for connections, WebRTC for voice).
 
-> Early development, **Windows only** for now. Not audited by third parties: treat it accordingly.
+> Early beta, for **Windows** and **Linux**. Not audited by third parties: treat it accordingly.
 
 ## Install
 
-1. Download `JungleMesh-Setup-x.y.z.exe` from the [Releases](../../releases) page and run it (one-click install, no administrator rights needed).
+**Windows 10/11**
+
+1. Download `JungleMesh-Setup-x.y.z.exe` from the [Releases](../../releases) page and run it (short setup wizard, no administrator rights needed).
 2. The installer is **not signed yet**: Windows shows "Windows protected your PC". Click **More info**, then **Run anyway**. If you want to check the download, GitHub shows each file's SHA-256 next to it on the release page.
+
+**Linux**
+
+Download the `.deb` (Ubuntu, Zorin, Debian: `sudo apt install ./JungleMesh-x.y.z.deb`) or the `.AppImage` (other distributions, needs FUSE 2) from the same page. Details in the [Linux install guide](docs/linux-install.md).
 
 ## Getting started
 
@@ -18,7 +24,7 @@ A **peer-to-peer desktop chat** in the spirit of Discord, with **no central serv
 3. Your friend opens the link (or pastes it in "add a friend") and confirms.
 4. Chat, create a room, join a voice channel.
 
-No account, no server, no phone number or email: your identity is a key pair stored on your computer (`%APPDATA%\JungleMesh`). Both people must be online at the same time to connect; pending messages are delivered on reconnection.
+No account, no server, no phone number or email: your identity is a key pair stored on your computer (`%APPDATA%\JungleMesh` on Windows, `~/.config/junglemesh` on Linux). Both people must be online at the same time to connect; pending messages are delivered on reconnection.
 
 ## Privacy and security
 
@@ -40,6 +46,7 @@ Read the full threat model, including what is **not** protected, in [SECURITY.md
 - Voice channels are limited to 8 people (full mesh).
 - Removing someone from a room is not cryptographic (see SECURITY.md).
 - Updates are offered from GitHub releases (you confirm each step); the installer is not code-signed yet.
+- Linux: automatic updates are not wired up yet (install new versions by hand); Wayland, desktop notifications and voice are not fully tested.
 
 ## Develop
 
@@ -48,7 +55,8 @@ npm install
 npm run dev          # run the app (default profile)
 npm run dev:bob      # second profile, to test with two instances on one machine
 npm run typecheck
-npm run dist         # build the installer into dist/
+npm run dist         # build the Windows installer into dist/
+npm run dist:linux   # build the AppImage and deb (run it on Linux or in WSL)
 ```
 
 Stack: Electron, React, Zustand, TypeScript, SCSS, Hyperswarm / Hypercore, WebRTC. See [CONTRIBUTING.md](CONTRIBUTING.md) to help. The interface is in English; translations are welcome.
