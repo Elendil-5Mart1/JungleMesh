@@ -44,6 +44,7 @@ export const getSavedState = (id: string): SavedState | undefined => {
 // (at startup only the home window opens: conversations are not restored)
 interface Session {
   trayHintShown: boolean
+  zoom?: number // UI zoom level (Ctrl +/-), shared by all windows
 }
 
 const sessionFile = (): string => join(app.getPath('userData'), 'session.json')

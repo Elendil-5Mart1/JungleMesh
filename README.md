@@ -9,7 +9,7 @@ A **peer-to-peer desktop chat** in the spirit of Discord, with **no central serv
 ## Install
 
 1. Download `JungleMesh-Setup-x.y.z.exe` from the [Releases](../../releases) page and run it (one-click install, no administrator rights needed).
-2. The installer is **not signed yet**: Windows shows "Windows protected your PC". Click **More info**, then **Run anyway**. Compare the file's SHA-256 with the one published in the release notes before running it.
+2. The installer is **not signed yet**: Windows shows "Windows protected your PC". Click **More info**, then **Run anyway**. If you want to check the download, GitHub shows each file's SHA-256 next to it on the release page.
 
 ## Getting started
 

@@ -1,7 +1,7 @@
 //* Window manager: one "home" window + one window per conversation (DM or room)
 import { app, BrowserWindow, dialog, screen, shell, type Rectangle } from 'electron'
 import { join } from 'node:path'
-import { getSavedState, saveState } from './windowState'
+import { getSavedState, loadSession, saveSession, saveState } from './windowState'
 
 // logical id ('home', 'chat:<key>') → open window
 const windows = new Map<string, BrowserWindow>()
@@ -17,12 +17,7 @@ interface OpenOptions {
   route: string // part after the #: the React view to display
   width: number // default size, if no position was remembered
   height: number
-  title: string
-  // true = no taskbar button (conversation windows):
-  // they are found with Alt+Tab, the home window or the icon next to the clock
-  skipTaskbar?: boolean
-  // the home window can be minimized; conversation windows only have "close"
-  minimizable?: boolean
+  title: string // also the taskbar label: every window has its own taskbar button
 }
 
 //& Placement: a new window must not cover another one
@@ -75,19 +70,32 @@ const confirmOpenLink = async (win: BrowserWindow, raw: string): Promise<void> =
   if (response === 0) void shell.openExternal(url.href)
 }
 
+//& UI zoom: Ctrl + / Ctrl - / Ctrl 0, same level in every window, remembered
+// (the windows have no menu, so Chromium's built-in shortcuts do not exist: we catch the keys ourselves)
+const ZOOM_STEP = 0.5 // one step ≈ +20 %
+const ZOOM_MIN = -3
+const ZOOM_MAX = 4
+let zoomLevel: number | null = null
+
+const currentZoom = (): number => (zoomLevel ??= loadSession().zoom ?? 0)
+
+const changeZoom = (next: number): void => {
+  zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next))
+  saveSession({ zoom: zoomLevel })
+  for (const w of windows.values()) if (!w.isDestroyed()) w.webContents.setZoomLevel(zoomLevel)
+}
+
 export const openWindow = ({
   id,
   route,
   width,
   height,
-  title,
-  skipTaskbar = false,
-  minimizable = false
+  title
 }: OpenOptions): BrowserWindow => {
   // Already open? We bring it to the foreground instead of creating a second one
   const existing = windows.get(id)
   if (existing && !existing.isDestroyed()) {
-    if (!existing.isVisible()) existing.show() // hidden by a "minimize" (see below)
+    if (!existing.isVisible()) existing.show()
     if (existing.isMinimized()) existing.restore()
     existing.focus()
     return existing
@@ -110,7 +118,8 @@ export const openWindow = ({
     minWidth: 320,
     minHeight: 300,
     title,
-    skipTaskbar,
+    // Dev only: the packaged app takes its icon from the exe / .desktop file, `npm run dev` runs the generic electron.exe
+    ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), 'build/icon.png') }),
     show: false, // shown once ready (no visual jump)
     // Window without the Windows frame: the title bar, buttons and chamfered corner are drawn by the app.
     // `transparent` lets the desktop show through the cut corner; resizing goes through our handles.
@@ -118,7 +127,6 @@ export const openWindow = ({
     transparent: true,
     backgroundColor: '#00000000',
     maximizable: false, // "maximize" makes no sense here
-    minimizable,
     hasShadow: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -134,15 +142,15 @@ export const openWindow = ({
 
   win.once('ready-to-show', () => win.show())
 
-  // Windows trap: a window WITHOUT a taskbar button that gets minimized
-  // becomes a lost mini title bar at the bottom left of the screen.
-  // → we hide it instead; reopening the conversation makes it reappear.
-  if (skipTaskbar) {
-    win.on('minimize', () => {
-      win.restore() // prevents it from reappearing minimized next time
-      win.hide()
-    })
-  }
+  win.webContents.on('did-finish-load', () => win.webContents.setZoomLevel(currentZoom()))
+  win.webContents.on('before-input-event', (e, input) => {
+    if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return
+    if (input.key === '+' || input.key === '=') changeZoom(currentZoom() + ZOOM_STEP)
+    else if (input.key === '-' || input.key === '_') changeZoom(currentZoom() - ZOOM_STEP)
+    else if (input.key === '0') changeZoom(0)
+    else return
+    e.preventDefault()
+  })
 
   // A link clicked in a message opens in the browser, never in the app
   // …after confirmation: a link's text can lie about its real destination (phishing)

@@ -30,12 +30,9 @@ const View = () => {
   return <HomeView />
 }
 
-// The home window can be minimized; the other windows only have "close"
-const isHome = !kind && route !== '/settings'
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <WindowFrame canMinimize={isHome} kind={kind}>
+    <WindowFrame kind={kind}>
       <View />
     </WindowFrame>
   </StrictMode>

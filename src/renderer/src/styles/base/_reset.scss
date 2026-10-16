@@ -15,6 +15,13 @@ body,
   height: 100%;
 }
 
+// Each window is a fixed frame: the views scroll inside it, never the document
+// (otherwise a native light scrollbar shows up next to the frame, e.g. in Settings › Privacy)
+html,
+body {
+  overflow: hidden;
+}
+
 body {
   background: transparent; // the window is transparent: the background is carried by .frame (chamfered corner)
   color: $text;
