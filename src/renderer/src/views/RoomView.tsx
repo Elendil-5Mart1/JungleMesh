@@ -10,6 +10,7 @@ import { RoomSettings } from '@/components/RoomSettings'
 import { useTranslation } from 'react-i18next'
 import { cleanError } from '@/utils/errors'
 import { useVoice } from '@/voice/useVoice'
+import { Splitter, useColumnWidth } from '@/components/Splitter'
 
 const EMPTY: never[] = [] // stable reference: avoids an infinite re-render with Zustand
 
@@ -40,6 +41,9 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
   const [inviting, setInviting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [error, setError] = useState('')
+  // Resizable side columns (width remembered)
+  const [navWidth, setNavWidth] = useColumnWidth('room:navWidth', 220, 140, 400)
+  const [membersWidth, setMembersWidth] = useColumnWidth('room:membersWidth', 220, 120, 360)
   // Number of messages already seen per channel → the other channels show "unread" in bold
   const [seen, setSeen] = useState<Record<string, number>>({})
 
@@ -212,7 +216,10 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
   )
 
   return (
-    <div className="room">
+    <div
+      className="room"
+      style={{ '--nav-w': `${navWidth}px`, '--members-w': `${membersWidth}px` } as React.CSSProperties}
+    >
       {/*& Left column: the room and its channels */}
       <nav className="room-nav">
         <header className="room-nav__header">
@@ -224,25 +231,28 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
             onChange={room.isOwner ? (avatar) => window.api.setRoomAvatar(roomKey, avatar) : undefined}
           />
           <h1 className="room-nav__room">{room.name}</h1>
-          {/* Any signed-up member can invite their own friends */}
-          {room.status === 'joined' && (
+          {/* Buttons on their own line under the name, aligned right */}
+          <div className="room-nav__actions">
+            {/* Any signed-up member can invite their own friends */}
+            {room.status === 'joined' && (
+              <button
+                type="button"
+                className={`room-nav__invite ${inviting ? 'room-nav__invite--on' : ''}`}
+                title={t('room.inviteFriends')}
+                onClick={() => setInviting(!inviting)}
+              >
+                👤+
+              </button>
+            )}
             <button
               type="button"
-              className={`room-nav__invite ${inviting ? 'room-nav__invite--on' : ''}`}
-              title={t('room.inviteFriends')}
-              onClick={() => setInviting(!inviting)}
+              className="room-nav__invite"
+              title={t('roomSettings.title')}
+              onClick={() => setSettingsOpen(true)}
             >
-              👤+
+              ⚙
             </button>
-          )}
-          <button
-            type="button"
-            className="room-nav__invite"
-            title={t('roomSettings.title')}
-            onClick={() => setSettingsOpen(true)}
-          >
-            ⚙
-          </button>
+          </div>
         </header>
 
         {/* Invitation panel */}
@@ -294,6 +304,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
           </footer>
         )}
       </nav>
+      <Splitter side="left" width={navWidth} onChange={setNavWidth} />
 
       {/*& Center: the selected channel */}
       <div className="chat room__chat">
@@ -385,6 +396,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
           </>
         )}
       </div>
+      <Splitter side="right" width={membersWidth} onChange={setMembersWidth} />
 
       {/*& Right column: members, online first (like Discord) */}
       <aside className="members">

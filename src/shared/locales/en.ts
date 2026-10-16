@@ -65,9 +65,9 @@ export const en = {
     "micDenied": "Microphone not allowed: enable it in the Windows privacy settings (Microphone).",
     "micFailed": "Could not start this microphone.",
     "mic": "Microphone",
-    "defaultMic": "Default (Windows default)",
+    "defaultMic": "Default (system default)",
     "output": "Audio output",
-    "defaultOutput": "Default (Windows default)",
+    "defaultOutput": "Default (system default)",
     "outputFallback": "Output",
     "test": "Microphone test",
     "stopTest": "Stop test",
@@ -144,6 +144,20 @@ export const en = {
   },
   "window": {
     "minimize": "Minimize"
+  },
+  "emoji": {
+    "button": "Emoji",
+    "search": "Search emoji…",
+    "none": "No emoji found",
+    "group0": "Smileys & emotion",
+    "group1": "People & body",
+    "group3": "Animals & nature",
+    "group4": "Food & drink",
+    "group5": "Travel & places",
+    "group6": "Activities",
+    "group7": "Objects",
+    "group8": "Symbols",
+    "group9": "Flags"
   },
   "welcome": {
     "title": "Welcome to JungleMesh",

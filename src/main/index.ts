@@ -83,15 +83,14 @@ const receiveLink = (args: string[]): boolean => {
 }
 
 //& Windows
-// The home window has its taskbar button; conversations do not (skipTaskbar).
+// Every window has its own taskbar button, labelled with its title (friend, room, settings)
 const openHome = (): void => {
   openWindow({
     id: 'home',
     route: '/home',
     width: 340,
     height: 600,
-    title: profile ? `JungleMesh (${profile})` : 'JungleMesh',
-    minimizable: true
+    title: profile ? `JungleMesh (${profile})` : 'JungleMesh'
   })
 }
 
@@ -103,19 +102,18 @@ const openChat = (key: string): void => {
     route: `/chat/${key}`,
     width: 520,
     height: 640,
-    title: friendName(key),
-    skipTaskbar: true
+    title: friendName(key)
   })
 }
 
 const openRoom = (key: string): void => {
   const title = core.roomName(key) ?? t('room.fallbackName')
-  openWindow({ id: `room:${key}`, route: `/room/${key}`, width: 980, height: 640, title, skipTaskbar: true })
+  openWindow({ id: `room:${key}`, route: `/room/${key}`, width: 980, height: 640, title })
 }
 
-// Settings: a single window, like the others without a taskbar button
+// Settings: a single window
 const openSettings = (): void => {
-  openWindow({ id: 'settings', route: '/settings', width: 760, height: 560, title: t('settings.title'), skipTaskbar: true })
+  openWindow({ id: 'settings', route: '/settings', width: 760, height: 560, title: t('settings.title') })
 }
 
 // Toggle (click in the home window): closed or hidden → show it; on screen → close it

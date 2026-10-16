@@ -40,11 +40,10 @@ const startResize = (edge: string, e: PointerEvent<HTMLElement>): void => {
 
 interface WindowFrameProps {
   children: ReactNode
-  canMinimize?: boolean // home window only; the other windows only have "close"
   kind?: string // 'chat': the bar carries the friend's name; 'room': empty bar (the room has its own header)
 }
 
-export const WindowFrame = ({ children, canMinimize = false, kind }: WindowFrameProps) => {
+export const WindowFrame = ({ children, kind }: WindowFrameProps) => {
   const { t } = useTranslation()
   const title = useDocumentTitle()
 
@@ -54,18 +53,16 @@ export const WindowFrame = ({ children, canMinimize = false, kind }: WindowFrame
         {!kind && <span className="titlebar__logo" aria-hidden />}
         <span className="titlebar__title">{kind === 'room' ? '' : title}</span>
         <div className="titlebar__buttons">
-          {canMinimize && (
-            <button
-              type="button"
-              className="titlebar__btn"
-              aria-label={t('window.minimize')}
-              onClick={() => window.api.windowMinimize()}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
-                <path d="M2 6h8" />
-              </svg>
-            </button>
-          )}
+          <button
+            type="button"
+            className="titlebar__btn"
+            aria-label={t('window.minimize')}
+            onClick={() => window.api.windowMinimize()}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+              <path d="M2 6h8" />
+            </svg>
+          </button>
           <button
             type="button"
             className="titlebar__btn titlebar__btn--close"

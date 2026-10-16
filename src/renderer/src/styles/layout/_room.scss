@@ -53,13 +53,9 @@
 .room-nav {
   display: flex;
   flex-direction: column;
-  width: 220px;
+  width: var(--nav-w, 220px); // set by the room view (resizable)
   flex-shrink: 0;
   background: $bg-soft;
-
-  @media (max-width: 900px) {
-    width: 180px;
-  }
 
   @media (max-width: 520px) {
     width: 64px; // narrow window: we only keep the icons
@@ -72,30 +68,40 @@
     }
   }
 
+  // Grid: avatar + name on the first line, buttons on the second, aligned right
   &__header {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr;
     align-items: center;
-    gap: $space;
+    column-gap: $space;
+    row-gap: $space * 0.5;
     padding: $space * 1.25 $space * 1.5;
     border-bottom: 1px solid transparent;
     border-image: linear-gradient(90deg, rgba($accent, 0.55), transparent 75%) 1;
   }
 
   &__room {
-    flex: 1;
+    min-width: 0;
     overflow: hidden;
-    font-size: 1em;
+    font-size: 1.1em;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  &__actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: $space * 0.5;
+  }
+
   &__invite {
-    padding: 2px 6px;
+    padding: 2px 8px;
     background: none;
     border: none;
     border-radius: 4px;
     color: $text-muted;
-    font-size: 0.85em;
+    font-size: 1.05em;
 
     &:hover,
     &--on {
@@ -159,7 +165,7 @@
     background: none;
     border: none;
     color: $text-muted;
-    font-size: 1.4em;
+    font-size: 1.9em;
     line-height: 1;
 
     &:hover {
@@ -228,20 +234,50 @@
   }
 }
 
+//* Drag handle between two columns: 1 px line, wider invisible hit area
+.splitter {
+  position: relative;
+  flex-shrink: 0;
+  width: 1px;
+  background: $border;
+  cursor: col-resize;
+
+  // Hit area: 9 px wide, centered on the line
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 -4px;
+    z-index: 5;
+  }
+
+  &:hover,
+  &:active {
+    background: $accent;
+  }
+
+  @media (max-width: 520px) {
+    &--left {
+      display: none; // the left column is reduced to its icons
+    }
+  }
+
+  @media (max-width: 560px) {
+    &--right {
+      display: none;
+    }
+  }
+}
+
 //* Right column: members (hidden if the window is narrow)
 .members {
-  width: 220px;
+  width: var(--members-w, 220px); // set by the room view (resizable)
   flex-shrink: 0;
   padding: $space;
   background: $bg-soft;
   overflow-y: auto;
   @include thin-scrollbar;
 
-  // Medium window: tighter column; really narrow: hidden to leave room for the chat
-  @media (max-width: 900px) {
-    width: 170px;
-  }
-
+  // Really narrow window: hidden (and its handle, see .splitter) to leave room for the chat
   @media (max-width: 560px) {
     display: none;
   }
