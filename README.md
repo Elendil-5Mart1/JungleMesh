@@ -2,7 +2,7 @@
 
 # JungleMesh
 
-A **peer-to-peer desktop chat** in the spirit of Discord, with **no central server**: private messages, rooms with text and voice channels, one window per conversation. Everything goes directly between computers (Hyperswarm for connections, WebRTC for voice).
+A **peer-to-peer desktop chat** with **no central server**: private messages and file sharing, rooms with text and voice channels, voice and video calls with screen sharing, one window per conversation. Everything goes directly between computers (Hyperswarm for connections and messages, WebRTC for calls).
 
 > Early beta, for **Windows** and **Linux**. Not audited by third parties: treat it accordingly.
 
@@ -31,7 +31,7 @@ No account, no server, no phone number or email: your identity is a key pair sto
 JungleMesh has no telemetry and never talks to a server of ours. Connections and voice are end-to-end encrypted. **But peer-to-peer means your friends can see your IP address.** What the app does to limit exposure (Settings › Privacy):
 
 - **Stealth mode**: only friends and room members can connect to you; someone who merely has your invite code cannot see you online.
-- **Hide my IP in voice calls**: audio goes through a TURN relay you configure instead of directly to your friends.
+- **Hide my IP in voice calls**: calls (voice, video and screen sharing) go through a TURN relay you configure instead of directly to your friends.
 - Hide message text in notifications, hide windows from screen capture, create a new identity, erase all data.
 - **Encrypted backup** of your identity (passphrase-protected file), so losing your computer does not mean losing your friends and rooms.
 - **Update checks** can be turned off: they are the only time the app contacts something other than your peers (GitHub).
@@ -43,7 +43,7 @@ Read the full threat model, including what is **not** protected, in [SECURITY.md
 ## Known limits
 
 - Without a TURN relay, voice may fail on very restrictive networks ("failed" in the voice panel).
-- Voice channels are limited to 8 people (full mesh).
+- Voice channels are limited to 8 people (full mesh: each video or screen stream is sent separately to every viewer).
 - Removing someone from a room is not cryptographic (see SECURITY.md).
 - Updates are offered from GitHub releases (you confirm each step); the installer is not code-signed yet.
 - Linux: automatic updates are not wired up yet (install new versions by hand); Wayland, desktop notifications and voice are not fully tested.

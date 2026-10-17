@@ -1,7 +1,7 @@
 {
   "name": "junglemesh",
   "version": "0.3.0",
-  "description": "Peer-to-peer desktop chat with separate windows (Discord-style, no central server)",
+  "description": "Peer-to-peer desktop chat with voice, video and screen sharing, no central server",
   "author": "NeuralKink",
   "homepage": "https://github.com/Elendil-5Mart1/JungleMesh",
   "license": "MIT",
