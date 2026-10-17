@@ -9,6 +9,7 @@ import { t } from '../../shared/i18n'
 export type VoiceControl =
   | { type: 'voice-state'; room: string; chan: string | null } // "I am in this voice channel" (null = I left)
   | { type: 'voice-signal'; room: string; chan: string; data: unknown } // offer / answer / ICE candidate
+  | { type: 'voice-decline'; room: string } // "I refuse your call" (1-to-1 call: the caller hangs up)
 
 export interface VoiceSignal {
   from: string
@@ -24,6 +25,7 @@ export interface VoiceHost {
   send: (key: string, msg: VoiceControl) => boolean
   changed: () => void
   signal: (signal: VoiceSignal) => void // to forward to the window that is calling
+  declined: (from: string, room: string) => void // the friend I am calling refused
 }
 
 interface Spot {
@@ -85,6 +87,12 @@ export class VoiceManager {
     this.host.send(to, { type: 'voice-signal', room, chan, data })
   }
 
+  // Refuses a call: we tell the people waiting in it (we are not in it ourselves)
+  decline(room: string): void {
+    if (!this.host.members(room).includes(this.host.me())) return
+    for (const [key, spot] of this.remote) if (spot.room === room) this.host.send(key, { type: 'voice-decline', room })
+  }
+
   //& Reception
   onControl(from: string, raw: unknown): void {
     const msg = raw as Partial<{ type: string; room: string; chan: string | null; data: unknown }>
@@ -107,6 +115,9 @@ export class VoiceManager {
       if (JSON.stringify(msg.data ?? null).length > MAX_SIGNAL_SIZE) return
       this.host.signal({ from, room: msg.room, chan: msg.chan, data: msg.data })
     }
+
+    // Only counts if I am really in that call (waiting for them)
+    if (msg.type === 'voice-decline' && this.local?.room === msg.room) this.host.declined(from, msg.room)
   }
 
   // A peer just connected: we tell them where we are

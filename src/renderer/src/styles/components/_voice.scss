@@ -45,24 +45,6 @@ $speaking: $accent; // turquoise of the "speaking" indicator
   padding: $space * 2;
   color: $text-muted;
 
-  &__users {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: $space * 3;
-  }
-
-  &__user {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: $space;
-    max-width: 96px;
-    color: $text;
-    font-size: 0.9em;
-    text-align: center;
-  }
-
   &__link {
     color: $text-muted;
     font-size: 0.8em;
@@ -112,6 +94,19 @@ $speaking: $accent; // turquoise of the "speaking" indicator
       @include chamfer(8px);
       background: $danger;
     }
+
+    // Button with a pictogram instead of text (video call)
+    &--icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    // Camera / diagnostic turned on
+    &--on {
+      background: rgba($accent, 0.25);
+      color: $accent-bright;
+    }
   }
 
   &__hint {
@@ -125,7 +120,7 @@ $speaking: $accent; // turquoise of the "speaking" indicator
   align-items: center;
   gap: $space;
   padding: $space $space * 1.5;
-  background: $bg;
+  background: glass($bg);
   border-top: 1px solid $border;
   color: $online;
   font-size: 0.85em;
@@ -172,6 +167,73 @@ $speaking: $accent; // turquoise of the "speaking" indicator
   }
 }
 
+//& Video tile (camera of a participant)
+.video-tile {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: $bg;
+  border-radius: $radius;
+  transition: box-shadow 0.1s;
+
+  // Same turquoise ring as the avatars, around the video
+  &--speaking {
+    box-shadow:
+      0 0 0 3px $speaking,
+      0 0 14px 3px rgba($speaking, 0.6);
+  }
+
+  &__video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+
+    &--mirror {
+      transform: scaleX(-1);
+    }
+  }
+
+  &__name {
+    position: absolute;
+    left: $space;
+    bottom: $space;
+    max-width: calc(100% - #{$space * 2});
+    padding: 2px $space;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: $radius;
+    color: #fff;
+    font-size: 0.85em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // Diagnostic (📊 button): technical lines on top of the image
+  &__stats {
+    position: absolute;
+    top: $space;
+    left: $space;
+    right: $space;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7em;
+    text-align: left;
+
+    span {
+      align-self: flex-start;
+      padding: 1px $space * 0.5;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      word-break: break-all;
+    }
+  }
+}
+
 //& Call strip at the top of a private conversation
 .callbar {
   display: flex;
@@ -182,6 +244,12 @@ $speaking: $accent; // turquoise of the "speaking" indicator
 
   &--ringing {
     background: rgba($accent, 0.08);
+  }
+
+  // The buttons keep their width: it is the text (name, error) that gets squeezed
+  .voice__btn {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   &__who {

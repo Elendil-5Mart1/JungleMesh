@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AppSettings } from '../../../shared/types'
 import { useTranslation } from 'react-i18next'
 import { Toggle } from '@/components/Toggle'
+import { VideoTile } from '@/components/VideoTile'
 
 interface Props {
   settings: AppSettings
@@ -17,9 +18,19 @@ export const AudioSettings = ({ settings, onChange }: Props) => {
   const [testing, setTesting] = useState(false)
   const [level, setLevel] = useState(0) // 0 to 1, for the level bar
   const stopTest = useRef<(() => void) | null>(null)
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
+  const [preview, setPreview] = useState<MediaStream | null>(null) // camera preview in progress
+
+  const listDevices = async (): Promise<void> => {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    setInputs(devices.filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications'))
+    setOutputs(devices.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications'))
+    setCameras(devices.filter((d) => d.kind === 'videoinput'))
+  }
 
   // Device names stay empty until the microphone has been allowed once:
   // we open it for a second, just to get the permission, then close it again.
+  // (Not done for the camera: its light would blink on every visit. Its names appear after the first preview.)
   useEffect(() => {
     const load = async (): Promise<void> => {
       try {
@@ -28,13 +39,41 @@ export const AudioSettings = ({ settings, onChange }: Props) => {
       } catch {
         setError(t('audio.micDenied'))
       }
-      const devices = await navigator.mediaDevices.enumerateDevices()
-      setInputs(devices.filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications'))
-      setOutputs(devices.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications'))
+      await listDevices()
     }
     void load()
-    return () => stopTest.current?.()
+    // Headset plugged in / unplugged while the tab is open: the lists follow
+    const onDeviceChange = (): void => void listDevices()
+    navigator.mediaDevices.addEventListener('devicechange', onDeviceChange)
+    return () => {
+      navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange)
+      stopTest.current?.()
+    }
   }, [])
+
+  // The preview is released when leaving the tab (the camera light turns off)
+  useEffect(() => () => preview?.getTracks().forEach((track) => track.stop()), [preview])
+
+  // Camera preview: same camera and resolution as in a call
+  const togglePreview = async (): Promise<void> => {
+    if (preview) return setPreview(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: settings.camId ? { exact: settings.camId } : undefined, width: { ideal: 1280 }, height: { ideal: 720 } }
+      })
+      setPreview(stream)
+      setError('')
+      await listDevices() // the names are readable now
+    } catch {
+      setError(t('voice.camFailed'))
+    }
+  }
+
+  // Another camera chosen during the preview: we restart it on the new one
+  const changeCamera = (camId: string): void => {
+    onChange({ camId })
+    setPreview(null)
+  }
 
   // Microphone test: same settings as in a call, the bar moves when you talk
   const toggleTest = async (): Promise<void> => {
@@ -114,6 +153,38 @@ export const AudioSettings = ({ settings, onChange }: Props) => {
           </div>
         </div>
       </div>
+
+      <div className="settings__field">
+        <span>{t('audio.camera')}</span>
+        <select value={settings.camId} onChange={(e) => changeCamera(e.target.value)}>
+          <option value="">{t('audio.defaultCamera')}</option>
+          {cameras.map((d, i) => (
+            <option key={d.deviceId || i} value={d.deviceId}>
+              {d.label || t('audio.cameraFallback', { n: i + 1 })}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="settings__field">
+        <span>{t('audio.cameraTest')}</span>
+        <div className="settings__row">
+          <button type="button" className="settings__button" onClick={() => void togglePreview()}>
+            {preview ? t('audio.stopCamTest') : t('audio.startCamTest')}
+          </button>
+        </div>
+        {preview && (
+          <div className="settings__preview">
+            <VideoTile stream={preview} name="" mirror={settings.mirrorCamera} />
+          </div>
+        )}
+      </div>
+      <Toggle
+        checked={settings.mirrorCamera}
+        onChange={(mirrorCamera) => onChange({ mirrorCamera })}
+        label={t('audio.mirror')}
+        hint={t('audio.mirrorHint')}
+      />
 
       <h3>{t('audio.processing')}</h3>
       <p className="settings__hint">

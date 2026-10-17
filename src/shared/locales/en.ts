@@ -38,7 +38,7 @@ export const en = {
       "profile": "My profile",
       "notifications": "Notifications",
       "app": "Application",
-      "audio": "Voice & audio",
+      "audio": "Video & audio",
       "privacy": "Privacy"
     },
     "name": "Display name",
@@ -53,13 +53,33 @@ export const en = {
     "toastsHint": "A pop-up at the bottom right when the app is not in the foreground. Badges are always shown.",
     "flash": "Flash the taskbar",
     "flashHint": "The home window icon flashes on every new message.",
+    "notifSound": "Notification sound",
+    "notifSoundHint": "A short sound on every new message, friend request or invitation. Muted conversations stay silent.",
+    "ringtone": "Ringtone",
+    "ringtoneHint": "Rings when a friend calls you, and a waiting tone plays while you call. Muted friends don't ring.",
+    "soundDefault": "Default sound",
+    "soundPick": "Choose a file…",
+    "soundReset": "Back to default",
+    "soundTest": "Test",
+    "soundFiles": "Audio files",
+    "soundTooBig": "This file is too big (5 MB max).",
     "mute": "Mute",
     "muteHint": "A muted conversation shows no badge, notification or flashing. Messages are still received.",
     "noConversations": "No conversation yet.",
     "autostart": "Launch when Windows starts",
     "autostartHint": "The app starts when you sign in and stays connected near the clock.",
     "autostartDev": "Only available in the installed app (not in development mode).",
-    "trayHint": "Closing the windows does not quit the app: it stays connected near the clock. To really quit, right-click its icon then \"Quit\"."
+    "trayHint": "Closing the windows does not quit the app: it stays connected near the clock. To really quit, right-click its icon then \"Quit\".",
+    "appearance": "Appearance",
+    "opacity": "Window opacity",
+    "opacityHint": "Below 100 %, the window backgrounds let the desktop show through. Text fields, menus and cards stay opaque.",
+    "material": "Blur",
+    "materials": {
+      "none": "None",
+      "pearl": "Pearl",
+      "acrylic": "Acrylic"
+    },
+    "materialHint": "Windows 11 only, visible below 100 % opacity. Acrylic: frosted glass. Pearl: frosted glass with a soft pearly sheen."
   },
   "audio": {
     "micDenied": "Microphone not allowed: enable it in the Windows privacy settings (Microphone).",
@@ -79,7 +99,15 @@ export const en = {
     "echo": "Echo cancellation",
     "echoHint": "Stops your friends' voices coming out of your speakers from going back into your microphone. Not needed with a headset.",
     "gain": "Automatic volume",
-    "gainHint": "Keeps your voice at a steady level whether you speak loudly or softly."
+    "gainHint": "Keeps your voice at a steady level whether you speak loudly or softly.",
+    "camera": "Camera",
+    "defaultCamera": "Default (first camera found)",
+    "cameraFallback": "Camera {{n}}",
+    "cameraTest": "Camera preview",
+    "startCamTest": "Preview camera",
+    "stopCamTest": "Stop preview",
+    "mirror": "Mirror my camera",
+    "mirrorHint": "Shows your own image like in a mirror. Only for you: the others always see you the right way round."
   },
   "common": {
     "close": "Close",
@@ -116,8 +144,46 @@ export const en = {
   "call": {
     "start": "Call",
     "join": "Join the call",
+    "video": "Video call",
     "incoming": "{{name}} is calling",
+    "inCall": "In a call",
+    "decline": "Decline",
+    "declined": "{{name}} declined the call",
     "offline": "{{name}} is offline"
+  },
+  "stage": {
+    "focus": "Click to enlarge",
+    "unfocus": "Click to go back to equal sizes",
+    "taller": "Taller",
+    "smaller": "Smaller",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen",
+    "screenOf": "{{name}}'s screen",
+    "myScreen_one": "Your screen · {{count}} viewer",
+    "myScreen_other": "Your screen · {{count}} viewers",
+    "live": "LIVE",
+    "watch": "Watch stream",
+    "unwatch": "Stop watching"
+  },
+  "screen": {
+    "title": "Share your screen",
+    "windows": "Applications",
+    "screens": "Entire screen",
+    "loading": "Looking for screens and windows…",
+    "none": "Nothing to share here.",
+    "quality": "Quality",
+    "profile": {
+      "720p30": "720p · 30 fps",
+      "720p60": "720p · 60 fps",
+      "1080p30": "1080p · 30 fps",
+      "1080p60": "1080p · 60 fps"
+    },
+    "detail": "Sharp text",
+    "motion": "Smooth: games, videos",
+    "qualityHint": "Up to {{mbps}} Mb/s of upload for EACH viewer (peer-to-peer: you send one copy to each of them).",
+    "audio": "Share sound",
+    "audioHint": "Sound of the whole PC (music, game). The voices of the call are left out.",
+    "go": "Go live"
   },
   "message": {
     "delete": "Delete message",
@@ -145,7 +211,9 @@ export const en = {
   },
   "menu": {
     "openChat": "Send a message",
-    "addFriend": "Add as friend",
+    "openRoom": "Open room",
+    "mute": "Mute notifications",
+    "unmute": "Unmute notifications",    "addFriend": "Add as friend",
     "removeFriend": "Remove friend",
     "removeFriendConfirm": "Click again to remove",
     "kick": "Remove from room",
@@ -178,6 +246,15 @@ export const en = {
     "undeafen": "Turn sound back on",
     "deafen": "Turn sound off",
     "leaveCall": "Leave",
+    "cameraOn": "Turn camera on",
+    "cameraOff": "Turn camera off",
+    "screenOn": "Share your screen",
+    "screenSwitch": "Change the shared screen or quality",
+    "screenOff": "Stop sharing your screen",
+    "screenStop": "Stop",
+    "stats": "Video diagnostic (codec, hardware encoding, fps)",
+    "statsHw": "hardware",
+    "statsSw": "software",
     "connecting": "Connecting…",
     "joinVoice": "Join voice",
     "channelStart": "Start of #{{name}}",
@@ -185,6 +262,7 @@ export const en = {
     "enrolling": "Enrolling…",
     "online": "Online",
     "offline": "Offline",
+    "onlineCount": "{{online}}/{{total}} online",
     "owner": "Room creator",
     "defaultVoiceName": "Voice",
     "fallbackName": "Room"
@@ -220,8 +298,13 @@ export const en = {
   },
   "voice": {
     "micDenied": "Microphone denied: allow microphone access in the Windows privacy settings.",
-    "micNotFound": "Microphone not found: check the microphone choice in Settings › Voice & audio.",
+    "micNotFound": "Microphone not found: check the microphone choice in Settings › Video & audio.",
     "micFailed": "Could not start the microphone.",
+    "camDenied": "Camera denied: allow camera access in the Windows privacy settings.",
+    "camNotFound": "Camera not found: check the camera choice in Settings › Video & audio.",
+    "camBusy": "The camera is already used by another app (Teams, OBS…).",
+    "camFailed": "Could not start the camera.",
+    "screenFailed": "Could not share this screen or window (closed in the meantime?).",
     "relayMissing": "Relay-only voice is on but no TURN relay is set: add one in Settings › Privacy."
   },
   "privacy": {
@@ -332,6 +415,7 @@ export const en = {
     "stillRunningBody": "Right-click the icon near the clock to quit."
   },
   "notif": {
+    "callTitle": "Incoming call",
     "friendRequest": "{{name}} wants to add you",
     "roomInvite": "{{who}} invites you to \"{{room}}\"",
     "roomInviteTitle": "Room invitation",

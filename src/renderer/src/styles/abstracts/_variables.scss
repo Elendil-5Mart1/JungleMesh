@@ -1,5 +1,6 @@
 //* Design variables: "sober cyberpunk" theme (mockup: see logs.md)
 // Bluish night, a turquoise for "active / alive", a magenta for "attention".
+@use 'sass:color';
 
 //& Colors
 $bg-deep: #07090d; // deepest background (fields, code blocks)
@@ -9,6 +10,13 @@ $bg-input: #07090d;
 $bg-code: #06080b;
 $border: #263243; // thin lines
 $line: #1c2531; // discreet separators
+
+// "Glass" version of a background: same color, opacity chosen in Settings › Application.
+// --glass (0.3 → 1) is set on <html> by the window; 1 = opaque, the default.
+// Only for the large surfaces (frame, panels): fields, menus and cards stay opaque, for readability.
+@function glass($color) {
+  @return rgb(color.channel($color, 'red', $space: rgb) color.channel($color, 'green', $space: rgb) color.channel($color, 'blue', $space: rgb) / var(--glass, 1));
+}
 
 $text: #d5dde8;
 $text-muted: #7a8799;

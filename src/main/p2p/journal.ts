@@ -1,5 +1,7 @@
 //* Common tools for Hypercore logs (private messages AND rooms)
-import type { Avatar, ChannelKind, ChatMessage } from '../../shared/types'
+import type { Avatar, CallEvent, ChannelKind, ChatMessage } from '../../shared/types'
+
+const CALL_EVENTS: CallEvent[] = ['declined']
 
 export const MAX_MESSAGE_LENGTH = 4000
 export const MAX_AVATAR_LENGTH = 100_000 // ~75 KB of image: large for 128×128
@@ -13,6 +15,7 @@ export const MAX_IMAGE_PIXELS = 40_000_000 // an image shown in the chat: refuse
 // 'join' (sign up a friend I invited) and 'leave' (I am leaving the room).
 export type JournalEntry =
   | { type?: 'msg'; id: string; text: string; ts: number; channel?: string; file?: SharedFile }
+  | { type: 'call'; id: string; event: CallEvent; ts: number } // DM call event, shown as a system line
   | { type: 'meta'; name?: string; avatar?: Avatar; imageTtl?: number | null; ts: number }
   | { type: 'member'; key: string; core: string; name: string; ts: number }
   | { type: 'member-remove'; key: string; name: string; reason: 'left' | 'kicked'; ts: number }
@@ -123,23 +126,39 @@ export const watchJournal = (core: any, onNew: (from: number) => void | Promise<
     const from = processed.get(core) ?? 0
     if (core.contiguousLength <= from) return
     processed.set(core, core.contiguousLength)
-    await onNew(from)
+    // Event listener: nobody awaits it, so an error (log closed meanwhile…) is logged here instead of
+    // becoming an unhandled rejection
+    await Promise.resolve(onNew(from)).catch((err) => console.error('journal: update failed', err))
   }
   core.on('append', onUpdate) // new entry written (by me) or announced (by a peer)
   core.on('download', onUpdate) // block received from a peer
 }
 
-// Raw entries available without waiting for the network (contiguousLength = no gap)
+// Raw entries available without waiting for the network (contiguousLength = no gap).
+// Read by batches of parallel gets: one await per entry made a long history (thousands of messages)
+// cost thousands of event-loop turns at every window opening.
+const READ_BATCH = 256
 export const readRaw = async (core: any, from = 0): Promise<unknown[]> => {
   const entries: unknown[] = []
-  for (let i = from; i < core.contiguousLength; i++) entries.push(await core.get(i, { wait: false }))
+  const end = core.contiguousLength
+  for (let i = from; i < end; i += READ_BATCH) {
+    const batch: Promise<unknown>[] = []
+    for (let j = i; j < Math.min(end, i + READ_BATCH); j++) batch.push(core.get(j, { wait: false }))
+    entries.push(...(await Promise.all(batch)))
+  }
   return entries
 }
 
 //& Turns a raw entry into a displayable message (or null if it is not one)
 // We never trust the content: every field is validated.
 export const toMessage = (raw: unknown, author: string): ChatMessage | null => {
-  const entry = raw as Partial<{ type: string; id: string; text: string; ts: number; channel: string; file: unknown }> | null
+  const entry = raw as Partial<{ type: string; id: string; text: string; ts: number; channel: string; file: unknown; event: unknown }> | null
+  // Call event ("X declined the call"): a system line, its author is the log's owner
+  if (entry?.type === 'call') {
+    if (typeof entry.id !== 'string' || !CALL_EVENTS.includes(entry.event as CallEvent)) return null
+    const ts = Number.isFinite(entry.ts) ? (entry.ts as number) : 0
+    return { id: entry.id.slice(0, 64), from: author, text: '', ts, system: true, call: entry.event as CallEvent }
+  }
   if (!entry || (entry.type !== undefined && entry.type !== 'msg')) return null
   if (typeof entry.text !== 'string' || typeof entry.id !== 'string') return null
   const file = entry.file === undefined ? undefined : cleanFile(entry.file)
@@ -196,8 +215,8 @@ export const findOwnMessage = async (core: any, id: string): Promise<{ file?: st
   return null
 }
 
-export const readMessages = async (core: any, author: string, from = 0): Promise<ChatMessage[]> => {
-  const raws = await readRaw(core, from)
+// Displayable messages of raw entries written by `author`, minus the ones they deleted in the same entries
+export const messagesOf = (raws: unknown[], author: string): ChatMessage[] => {
   const messages: ChatMessage[] = []
   for (const raw of raws) {
     const msg = toMessage(raw, author)
@@ -205,3 +224,6 @@ export const readMessages = async (core: any, author: string, from = 0): Promise
   }
   return withoutDeleted(raws, messages, author)
 }
+
+export const readMessages = async (core: any, author: string, from = 0): Promise<ChatMessage[]> =>
+  messagesOf(await readRaw(core, from), author)

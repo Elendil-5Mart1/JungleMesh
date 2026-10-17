@@ -1,9 +1,9 @@
 //* Entry point of the Electron main process
-import { app, dialog, ipcMain, session, BrowserWindow } from 'electron'
+import { app, desktopCapturer, dialog, ipcMain, session, BrowserWindow } from 'electron'
 import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import type { AppSettings, Avatar, ChannelKind, ChatMessage, CoreState } from '../shared/types'
+import { basename, join } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import type { AppSettings, Avatar, ChannelKind, ChatMessage, CoreState, ScreenSource, SoundKind } from '../shared/types'
 import { P2PCore } from './p2p/core'
 import { cleanFileName } from './p2p/journal'
 import { createNotifier, type ConvInfo } from './notifier'
@@ -28,6 +28,7 @@ import {
   allWindows,
   getWindowId,
   openWindow,
+  setWindowMaterial,
   visibleWindowIds,
   watchVisibleWindows
 } from './windows'
@@ -96,7 +97,7 @@ const openHome = (): void => {
   })
 }
 
-const friendName = (key: string): string => core.getState().friends.find((f) => f.key === key)?.name ?? t('chat.friend')
+const friendName = (key: string): string => core.friendName(key) ?? t('chat.friend')
 
 const openChat = (key: string): void => {
   openWindow({
@@ -113,6 +114,39 @@ const openRoom = (key: string): void => {
   openWindow({ id: `room:${key}`, route: `/room/${key}`, width: 980, height: 640, title })
 }
 
+// Incoming call: small popup centered on the screen, Join / Decline
+const openIncoming = (key: string): void => {
+  if (getWindow(`incoming:${key}`)) return
+  const win = openWindow({ id: `incoming:${key}`, route: `/incoming/${key}`, width: 320, height: 280, title: t('notif.callTitle'), popup: true })
+  // Closed with the ✕ = Decline. Not when it closes because the call was answered or is over.
+  win.on('closed', () => {
+    if (!handled.delete(key)) declineCall(key)
+  })
+}
+const handled = new Set<string>() // popups closed by the app itself (answered, hung up, declined)
+const closeIncoming = (key: string): void => {
+  const win = getWindow(`incoming:${key}`)
+  if (!win) return
+  handled.add(key)
+  win.close()
+}
+// Decline: no more ringing here, and the caller is told (their call ends)
+const declineCall = (key: string): void => {
+  notifier.decline(key)
+  core.declineCall(key).catch((err) => console.error('call: decline failed', err))
+}
+
+// "Join" in the popup: the friend's window opens and joins the call by itself.
+// Window already loaded: we tell it right away; otherwise it asks once loaded (call:takeAutoJoin).
+const autoJoin = new Set<string>()
+const acceptCall = (key: string): void => {
+  closeIncoming(key)
+  const existing = getWindow(`chat:${key}`)
+  openChat(key)
+  if (existing && !existing.webContents.isLoading()) existing.webContents.send('call:autojoin')
+  else autoJoin.add(key)
+}
+
 // Settings: a single window
 const openSettings = (): void => {
   openWindow({ id: 'settings', route: '/settings', width: 760, height: 560, title: t('settings.title') })
@@ -127,9 +161,14 @@ const toggleWindow = (id: string, open: () => void): void => {
 
 //& Unread and notifications
 // convId = key of a friend (DM) or of a room: we describe the conversation to the notifier
+// Last state sent to the windows: enough for names, and avoids rebuilding the whole state per received message
+// (rebuilt only if it does not know the room or the author yet: a member who just joined)
+let lastState: CoreState | null = null
 const describe = (convId: string, msg: ChatMessage): ConvInfo => {
-  const room = core.getState().rooms.find((r) => r.key === convId)
-  if (!room) return { windowId: `chat:${convId}`, title: friendName(convId), open: () => openChat(convId) }
+  if (!core.isRoom(convId)) return { windowId: `chat:${convId}`, title: friendName(convId), open: () => openChat(convId) }
+  const known = (s: CoreState | null) => s?.rooms.find((r) => r.key === convId && r.members.some((m) => m.key === msg.from))
+  const room = known(lastState) ?? core.getState().rooms.find((r) => r.key === convId)
+  if (!room) return { windowId: `room:${convId}`, title: core.roomName(convId) ?? '', open: () => openRoom(convId) }
   const author = room.members.find((m) => m.key === msg.from)?.name ?? '?'
   const channel = room.channels.find((c) => c.id === (msg.channel ?? 'general'))?.name ?? 'general'
   return { windowId: `room:${convId}`, title: `${author} · ${room.name} #${channel}`, open: () => openRoom(convId) }
@@ -141,21 +180,32 @@ let tray: ReturnType<typeof createTray> | null = null // created once the app is
 // Settings that apply to the windows themselves (screen capture, local IP leak in WebRTC)
 const hardenWindow = (win: BrowserWindow): void => {
   win.setContentProtection(settings.get().contentProtection)
-  // Only publish the default network interface: not the list of all the machine's local addresses
-  win.webContents.setWebRTCIPHandlingPolicy('default_public_interface_only')
+  // Only publish the default network interface (not VPNs / virtual machines), with its local address:
+  // without it, two devices on the same network can only reach each other through the router's public IP,
+  // which many routers refuse (no "hairpinning") → calls stuck on "connecting". The local IP (192.168…) is
+  // useless from the Internet. Relay mode stays strict: `iceTransportPolicy: 'relay'` ignores these addresses.
+  win.webContents.setWebRTCIPHandlingPolicy('default_public_and_private_interfaces')
 }
-const applyWindowSettings = (): void => allWindows().forEach(hardenWindow)
+const applyWindowSettings = (): void => {
+  allWindows().forEach(hardenWindow)
+  // Blur behind the windows: only useful (and only applied) when the backgrounds are translucent
+  const { windowOpacity, windowMaterial } = settings.get()
+  setWindowMaterial(windowOpacity < 100 ? windowMaterial : 'none')
+}
 
 const settings = createSettings((s: AppSettings) => {
   broadcast('settings:changed', s)
   applyWindowSettings()
 })
+setWindowMaterial(settings.get().windowOpacity < 100 ? settings.get().windowMaterial : 'none')
 app.on('browser-window-created', (_e, win) => hardenWindow(win))
 
 const notifier = createNotifier({
   myKey: () => core.getState().me.publicKey,
   describe,
   openHome,
+  openIncoming,
+  closeIncoming,
   settings: settings.get,
   onChange: (unread) => {
     broadcast('unread:changed', unread)
@@ -165,19 +215,39 @@ const notifier = createNotifier({
 
 //& Security
 // By default Electron grants ALL web permissions (camera, geolocation, notifications…): we only allow the microphone
-// and writing to the clipboard ("copy" buttons). Reading the clipboard stays refused.
-const grantable = (permission: string): boolean => permission === 'media' || permission === 'clipboard-sanitized-write'
+// and camera, writing to the clipboard ("copy" buttons) and full screen (⛶ button of the call stage).
+// Reading the clipboard stays refused.
+const GRANTABLE = new Set(['media', 'clipboard-sanitized-write', 'fullscreen'])
+const grantable = (permission: string): boolean => GRANTABLE.has(permission)
 const lockPermissions = (): void => {
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(grantable(permission)))
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => grantable(permission))
+  // Screen sharing: Chromium asks here WHAT to capture when a page calls getDisplayMedia.
+  // We only answer with the source the user just picked in our own picker (screen:choose), once:
+  // a page cannot capture the screen on its own, without that click.
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    const choice = screenChoice
+    screenChoice = null
+    const fresh = choice && Date.now() - choice.at < 10_000
+    const ours = request.frame && fromOurUrl(request.frame.url)
+    const sources = fresh && ours ? await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } }) : []
+    const source = sources.find((s) => s.id === choice?.id)
+    // No video in the answer = request refused (the page gets a NotAllowedError)
+    if (!source) return callback({})
+    // 'loopback' = sound of the whole PC (Windows only); the page then removes its own voices (restrictOwnAudio)
+    callback({ video: source, audio: choice!.audio && process.platform === 'win32' ? 'loopback' : undefined })
+  })
 }
 
+// Source picked in the picker, waiting for the page's getDisplayMedia (see above)
+let screenChoice: { id: string; audio: boolean; at: number } | null = null
+
 // IPC messages must only come from our own pages (local file, or Vite server in dev)
-const fromOurPages = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean => {
-  const url = e.senderFrame?.url ?? ''
+const fromOurUrl = (url: string): boolean => {
   const dev = process.env.ELECTRON_RENDERER_URL
   return url.startsWith('file://') || (!!dev && url.startsWith(dev))
 }
+const fromOurPages = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean => fromOurUrl(e.senderFrame?.url ?? '')
 const handle = ipcMain.handle.bind(ipcMain)
 ipcMain.handle = (channel, listener) =>
   handle(channel, (e, ...args) => {
@@ -198,25 +268,25 @@ ipcMain.handle('core:getState', () => core.getState())
 ipcMain.handle('core:setName', (_e, name: string) => core.setName(name))
 ipcMain.handle('core:setAvatar', (_e, avatar: Avatar) => core.setAvatar(avatar))
 ipcMain.handle('friends:add', (_e, code: string, nickname: string) => core.addFriend(code, nickname))
-ipcMain.handle('friends:accept', (_e, key: string) => core.acceptRequest(key))
-ipcMain.handle('friends:decline', (_e, key: string) => core.declineRequest(key))
+ipcMain.handle('friends:accept', (_e, key: string) => core.acceptRequest(asKey(key)))
+ipcMain.handle('friends:decline', (_e, key: string) => core.declineRequest(asKey(key)))
 ipcMain.handle('rooms:create', (_e, name: string) => core.createRoom(name))
-ipcMain.handle('rooms:setAvatar', (_e, room: string, avatar: Avatar) => core.setRoomAvatar(room, avatar))
+ipcMain.handle('rooms:setAvatar', (_e, room: string, avatar: Avatar) => core.setRoomAvatar(asKey(room), avatar))
 ipcMain.handle('rooms:createChannel', (_e, room: string, name: string, kind: ChannelKind) =>
-  core.createChannel(room, name, kind)
+  core.createChannel(asKey(room), name, kind === 'voice' ? 'voice' : 'text')
 )
-ipcMain.handle('rooms:rename', (_e, room: string, name: string) => core.renameRoom(room, name))
+ipcMain.handle('rooms:rename', (_e, room: string, name: string) => core.renameRoom(asKey(room), name))
 ipcMain.handle('rooms:renameChannel', (_e, room: string, id: string, name: string) =>
-  core.renameChannel(room, id, name)
+  core.renameChannel(asKey(room), String(id), name)
 )
-ipcMain.handle('rooms:deleteChannel', (_e, room: string, id: string) => core.deleteChannel(room, id))
-ipcMain.handle('rooms:kick', (_e, room: string, member: string) => core.kickFromRoom(room, member))
-ipcMain.handle('rooms:leave', (_e, room: string) => core.leaveRoom(room))
+ipcMain.handle('rooms:deleteChannel', (_e, room: string, id: string) => core.deleteChannel(asKey(room), String(id)))
+ipcMain.handle('rooms:kick', (_e, room: string, member: string) => core.kickFromRoom(asKey(room), asKey(member)))
+ipcMain.handle('rooms:leave', (_e, room: string) => core.leaveRoom(asKey(room)))
 ipcMain.handle('rooms:delete', (_e, room: string) => core.deleteRoom(asKey(room)))
 ipcMain.handle('friends:remove', (_e, key: string) => core.removeFriend(asKey(key)))
-ipcMain.handle('rooms:invite', (_e, room: string, friend: string) => core.inviteToRoom(room, friend))
-ipcMain.handle('rooms:accept', (_e, room: string) => core.acceptRoomInvite(room))
-ipcMain.handle('rooms:decline', (_e, room: string) => core.declineRoomInvite(room))
+ipcMain.handle('rooms:invite', (_e, room: string, friend: string) => core.inviteToRoom(asKey(room), asKey(friend)))
+ipcMain.handle('rooms:accept', (_e, room: string) => core.acceptRoomInvite(asKey(room)))
+ipcMain.handle('rooms:decline', (_e, room: string) => core.declineRoomInvite(asKey(room)))
 ipcMain.handle('chat:history', (_e, convId: string) => core.getHistory(asKey(convId)))
 ipcMain.handle('chat:send', (_e, convId: string, text: string, channel?: string) =>
   core.send(asKey(convId), text, channel)
@@ -247,7 +317,7 @@ core.on('file-progress', (key, done, total) => broadcast('files:progress', key, 
 
 // Voice channels: if the window that is calling closes, we leave the channel (otherwise we stay there as a "ghost")
 ipcMain.handle('voice:join', (e, room: string, chan: string) => {
-  core.voiceJoin(room, chan)
+  core.voiceJoin(asKey(room), String(chan))
   e.sender.once('destroyed', () => {
     const state = core.getState()
     const spot = state.rooms.find((r) => r.key === room)?.voice[chan] ?? state.friends.find((f) => f.callId === room)?.call
@@ -258,6 +328,24 @@ ipcMain.handle('voice:leave', () => core.voiceLeave())
 ipcMain.handle('voice:signal', (_e, to: string, room: string, chan: string, data: unknown) =>
   core.voiceSignal(to, room, chan, data)
 )
+// Screen sharing: thumbnails for the picker, then the chosen source (used by setDisplayMediaRequestHandler)
+ipcMain.handle('screen:sources', async (): Promise<ScreenSource[]> => {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen', 'window'],
+    thumbnailSize: { width: 320, height: 180 },
+    fetchWindowIcons: true
+  })
+  return sources.map((s) => ({
+    id: s.id,
+    name: s.name,
+    kind: s.id.startsWith('screen:') ? 'screen' : 'window',
+    thumbnail: s.thumbnail.isEmpty() ? '' : s.thumbnail.toDataURL(),
+    icon: s.appIcon && !s.appIcon.isEmpty() ? s.appIcon.toDataURL() : ''
+  }))
+})
+ipcMain.handle('screen:choose', (_e, id: string, audio: boolean) => {
+  screenChoice = { id: String(id), audio: audio === true, at: Date.now() }
+})
 ipcMain.handle('invite:pending', () => pendingInvite)
 ipcMain.handle('invite:clear', () => {
   pendingInvite = null
@@ -270,6 +358,44 @@ ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
   core.setImageTtl(settings.get().imageTtlHours)
   // Muting a conversation clears its unread count (otherwise the badge would stay lit)
   for (const key of settings.get().muted) notifier.markRead(key)
+  notifier.onState(core.getState(), true) // ringtone turned off / friend muted while ringing: stop it
+})
+
+//& Incoming call popup
+ipcMain.handle('call:accept', (_e, key: unknown) => acceptCall(asKey(key)))
+ipcMain.handle('call:decline', (_e, key: unknown) => declineCall(asKey(key)))
+ipcMain.handle('call:takeAutoJoin', (_e, key: unknown) => autoJoin.delete(asKey(key)))
+
+//& Custom sounds: copied into the profile (the original file can move or disappear), max 5 MB
+const SOUND_EXTENSIONS = ['mp3', 'wav', 'ogg', 'oga', 'opus', 'm4a', 'aac', 'flac', 'webm']
+const soundPath = (kind: SoundKind): string => join(app.getPath('userData'), 'sounds', kind)
+const asSoundKind = (kind: unknown): SoundKind => {
+  if (kind !== 'notif' && kind !== 'ring') throw new Error('Invalid sound')
+  return kind
+}
+ipcMain.handle('sound:pick', async (e, kind: unknown) => {
+  const which = asSoundKind(kind)
+  const win = BrowserWindow.fromWebContents(e.sender)
+  const options = { properties: ['openFile' as const], filters: [{ name: t('settings.soundFiles'), extensions: SOUND_EXTENSIONS }] }
+  const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+  if (canceled || !filePaths[0]) return null
+  if (statSync(filePaths[0]).size > 5_000_000) throw new Error(t('settings.soundTooBig'))
+  mkdirSync(join(app.getPath('userData'), 'sounds'), { recursive: true })
+  copyFileSync(filePaths[0], soundPath(which))
+  const name = basename(filePaths[0])
+  settings.setSoundFile(which, name)
+  return name
+})
+ipcMain.handle('sound:reset', (_e, kind: unknown) => {
+  const which = asSoundKind(kind)
+  rmSync(soundPath(which), { force: true })
+  settings.setSoundFile(which, '')
+})
+ipcMain.handle('sound:get', (_e, kind: unknown) => {
+  const which = asSoundKind(kind)
+  const name = which === 'notif' ? settings.get().notifSoundFile : settings.get().ringtoneFile
+  if (!name || !existsSync(soundPath(which))) return null
+  return new Uint8Array(readFileSync(soundPath(which)))
 })
 ipcMain.handle('window:openSettings', () => openSettings())
 ipcMain.handle('data:reset', async (_e, mode: unknown) => {
@@ -365,6 +491,7 @@ watchVisibleWindows((ids) => broadcast('windows:visible', ids))
 
 // …and the core notifies all windows when something changes
 core.on('state', (state: CoreState) => {
+  lastState = state
   broadcast('core:state', state)
   notifier.onState(state)
   tray?.refresh() // online friends / new rooms in the menu
@@ -376,6 +503,8 @@ core.on('state', (state: CoreState) => {
   }
 })
 core.on('voice-signal', (signal) => broadcast('voice:signal', signal))
+// The friend I am calling refused: their window hangs up and says so
+core.on('call-declined', (from: string) => getWindow(`chat:${from}`)?.webContents.send('call:declined'))
 core.on('message', (convId, msg) => {
   broadcast('chat:message', convId, msg)
   notifier.onMessage(convId, msg)
@@ -431,4 +560,13 @@ app.on('window-all-closed', () => {
   saveSession({ trayHintShown: true })
 })
 
-app.on('before-quit', () => void core.stop())
+// Quitting waits for the P2P core to finish its saves (contacts.json…) and close the logs cleanly.
+// The first 'before-quit' is held back, the real quit is called again once the core is stopped.
+let stopping = false
+app.on('before-quit', (e) => {
+  if (stopping) return
+  stopping = true
+  e.preventDefault()
+  const timeout = new Promise((r) => setTimeout(r, 5000)) // a stuck network close must not block the quit
+  void Promise.race([core.stop().catch((err) => console.error('stop failed', err)), timeout]).then(() => app.quit())
+})

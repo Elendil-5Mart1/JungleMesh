@@ -4,6 +4,7 @@ import { useRef, useState, type ChangeEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { fileToAvatar } from '@/utils/image'
 import { cleanError } from '@/utils/errors'
+import { Icon } from '@/components/Icon'
 
 interface AvatarProps {
   src: string | null
@@ -53,7 +54,7 @@ export const Avatar = ({ src, name, size = 32, status, onChange }: AvatarProps) 
       {status && <span className={`avatar__status ${status === 'online' ? 'avatar__status--online' : ''}`} />}
       {editable && (
         <>
-          <span className="avatar__edit">✎</span>
+          <span className="avatar__edit"><Icon name="pencil" size={14} /></span>
           <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={pick} />
         </>
       )}

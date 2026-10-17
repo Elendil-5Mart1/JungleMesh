@@ -13,7 +13,7 @@
     width: 200px;
     flex-shrink: 0;
     padding: $space * 2 $space;
-    background: $bg-soft;
+    background: glass($bg-soft);
   }
 
   &__heading {
@@ -112,6 +112,13 @@
     color: $text-muted;
   }
 
+  // Camera preview (Video & audio tab)
+  &__preview {
+    width: 320px;
+    max-width: 100%;
+    margin-top: $space;
+  }
+
   &__link {
     background: none;
     border: none;
@@ -145,6 +152,89 @@
       border: none;
       color: $on-accent;
     }
+  }
+
+  // Opacity slider: label, slider, value in %
+  &__slider {
+    display: flex;
+    align-items: center;
+    gap: $space * 2;
+    margin-top: $space;
+
+    input {
+      flex: 1;
+      accent-color: $accent;
+    }
+
+    output {
+      min-width: 48px;
+      color: $text-muted;
+      font-family: $font-mono;
+      font-size: 0.85em;
+      text-align: right;
+    }
+  }
+
+  // Segmented choice (blur: None / Pearl / Acrylic)
+  &__choices {
+    display: flex;
+    align-items: center;
+    gap: $space;
+    margin-top: $space * 2;
+
+    > span {
+      flex: 1;
+    }
+
+    button {
+      padding: $space * 0.5 $space * 1.5;
+      background: $bg-input;
+      border: 1px solid $border;
+      border-radius: $radius;
+      color: $text-muted;
+
+      &:hover {
+        color: $text;
+      }
+    }
+  }
+
+  &__choice--on {
+    border-color: $accent !important;
+    color: $accent !important;
+  }
+
+  // Sound chosen for a notification / the ringtone, right under its toggle
+  &__sound {
+    display: flex;
+    align-items: center;
+    gap: $space;
+    margin: $space 0 $space * 2;
+    font-size: 0.85em;
+
+    button:not(.settings__link) {
+      display: inline-flex;
+      align-items: center;
+      gap: $space * 0.5;
+      padding: $space * 0.5 $space;
+      background: $bg-input;
+      border: 1px solid $border;
+      border-radius: $radius;
+
+      &:hover {
+        border-color: $accent;
+        color: $accent;
+      }
+    }
+  }
+
+  &__sound-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: $text-muted;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

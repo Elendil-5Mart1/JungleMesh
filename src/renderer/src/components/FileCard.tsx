@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '../../../shared/types'
 import { cleanError } from '@/utils/errors'
+import { Icon } from '@/components/Icon'
 
 const formatSize = (bytes: number): string =>
   bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
@@ -51,14 +52,14 @@ export const FileCard = ({ file, ts, ttlHours }: FileCardProps) => {
     }
   }, [file.core, file.image, expired])
 
-  // Progress of a transfer I started
-  useEffect(
-    () =>
-      window.api.onFileProgress((key, done, total) => {
-        if (key === file.core) setProgress(done / total)
-      }),
-    [file.core]
-  )
+  // Progress of a transfer I started (listened to only during the transfer: a long conversation full of
+  // images would otherwise hang one IPC listener per attachment)
+  useEffect(() => {
+    if (transfer !== 'running') return
+    return window.api.onFileProgress((key, done, total) => {
+      if (key === file.core) setProgress(done / total)
+    })
+  }, [file.core, transfer])
 
   // "Download": the destination dialog comes first, the transfer starts once it is chosen
   const download = async (): Promise<void> => {
@@ -112,7 +113,7 @@ export const FileCard = ({ file, ts, ttlHours }: FileCardProps) => {
   return (
     <div className="attachment">
       <div className="attachment__row">
-        <span aria-hidden>📄</span>
+        <Icon name="file" size={18} />
         <span className="attachment__name" title={file.name}>
           {file.name}
         </span>

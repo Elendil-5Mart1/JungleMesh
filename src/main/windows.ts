@@ -2,6 +2,8 @@
 import { app, BrowserWindow, dialog, screen, shell, type Rectangle } from 'electron'
 import { join } from 'node:path'
 import { getSavedState, loadSession, saveSession, saveState } from './windowState'
+import { setRoundCorners } from './dwm'
+import type { WindowMaterial } from '../shared/types'
 
 // logical id ('home', 'chat:<key>') → open window
 const windows = new Map<string, BrowserWindow>()
@@ -18,6 +20,22 @@ interface OpenOptions {
   width: number // default size, if no position was remembered
   height: number
   title: string // also the taskbar label: every window has its own taskbar button
+  // Small notification window (incoming call): centered, above everything, fixed size,
+  // shown without taking the focus (does not interrupt a game or a typed message)
+  popup?: boolean
+}
+
+// Popup centered on the screen where the mouse is (the one the user is looking at);
+// several calls at once: the next ones are shifted down
+const popupSpot = (width: number, height: number): Rectangle => {
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+  const stacked = [...windows.keys()].filter((id) => id.startsWith('incoming:')).length
+  return {
+    width,
+    height,
+    x: Math.round(area.x + (area.width - width) / 2),
+    y: Math.round(area.y + (area.height - height) / 2) + stacked * (height + GAP)
+  }
 }
 
 //& Placement: a new window must not cover another one
@@ -70,6 +88,25 @@ const confirmOpenLink = async (win: BrowserWindow, raw: string): Promise<void> =
   if (response === 0) void shell.openExternal(url.href)
 }
 
+//& Blur behind the windows (Windows 11 only: elsewhere setBackgroundMaterial does nothing)
+// Only when the backgrounds are translucent: opaque, the blur would be hidden anyway.
+// "Pearl" is Acrylic underneath: its pearly sheen is drawn by the page (`.frame::before`).
+let material: WindowMaterial = 'none'
+const applyMaterial = (win: BrowserWindow): void => {
+  if (process.platform !== 'win32') return
+  win.setBackgroundMaterial(material === 'none' ? 'none' : 'acrylic')
+  // Removing a material puts back an opaque window background: make it transparent again,
+  // otherwise "None" shows a flat grey instead of the desktop
+  if (material === 'none') win.setBackgroundColor('#00000000')
+  // The material ignores the CSS chamfer: rounded native corners instead (the page drops its chamfer too)
+  setRoundCorners(win, material !== 'none')
+}
+export const setWindowMaterial = (next: typeof material): void => {
+  if (next === material) return
+  material = next
+  for (const w of windows.values()) if (!w.isDestroyed()) applyMaterial(w)
+}
+
 //& UI zoom: Ctrl + / Ctrl - / Ctrl 0, same level in every window, remembered
 // (the windows have no menu, so Chromium's built-in shortcuts do not exist: we catch the keys ourselves)
 const ZOOM_STEP = 0.5 // one step ≈ +20 %
@@ -90,33 +127,38 @@ export const openWindow = ({
   route,
   width,
   height,
-  title
+  title,
+  popup = false
 }: OpenOptions): BrowserWindow => {
   // Already open? We bring it to the foreground instead of creating a second one
   const existing = windows.get(id)
   if (existing && !existing.isDestroyed()) {
+    if (popup) return existing
     if (!existing.isVisible()) existing.show()
     if (existing.isMinimized()) existing.restore()
     existing.focus()
     return existing
   }
 
-  const saved = getSavedState(id)
+  const saved = popup ? undefined : getSavedState(id)
 
   // Wanted position: the one from last time, otherwise the center of the primary screen
   const area = screen.getPrimaryDisplay().workArea
-  const bounds = freeSpot({
-    width,
-    height,
-    x: Math.round(area.x + (area.width - width) / 2),
-    y: Math.round(area.y + (area.height - height) / 2),
-    ...saved?.bounds // position/size from last time (overrides the default values)
-  })
+  const bounds = popup
+    ? popupSpot(width, height)
+    : freeSpot({
+        width,
+        height,
+        x: Math.round(area.x + (area.width - width) / 2),
+        y: Math.round(area.y + (area.height - height) / 2),
+        ...saved?.bounds // position/size from last time (overrides the default values)
+      })
 
   const win = new BrowserWindow({
     ...bounds,
-    minWidth: 320,
-    minHeight: 300,
+    minWidth: popup ? width : 320,
+    minHeight: popup ? height : 300,
+    ...(popup ? { resizable: false, alwaysOnTop: true, skipTaskbar: true, minimizable: false } : {}),
     title,
     // Dev only: the packaged app takes its icon from the exe / .desktop file, `npm run dev` runs the generic electron.exe
     ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), 'build/icon.png') }),
@@ -140,7 +182,8 @@ export const openWindow = ({
     }
   })
 
-  win.once('ready-to-show', () => win.show())
+  if (material !== 'none') applyMaterial(win)
+  win.once('ready-to-show', () => (popup ? win.showInactive() : win.show()))
 
   win.webContents.on('did-finish-load', () => win.webContents.setZoomLevel(currentZoom()))
   win.webContents.on('before-input-event', (e, input) => {
@@ -171,7 +214,7 @@ export const openWindow = ({
   }
 
   windows.set(id, win)
-  win.on('close', () => saveState(id, win))
+  if (!popup) win.on('close', () => saveState(id, win))
   win.on('closed', () => {
     windows.delete(id)
     onVisibleChange(visibleWindowIds())

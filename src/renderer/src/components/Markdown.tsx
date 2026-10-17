@@ -1,10 +1,11 @@
 //* Markdown rendering of a message, Discord-style (colored code, lists, tables…)
-import { useState, type ComponentProps } from 'react'
+import { memo, useState, type ComponentProps } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import rehypeHighlight from 'rehype-highlight'
 import { useTranslation } from 'react-i18next'
+import { Icon } from '@/components/Icon'
 import 'highlight.js/styles/github-dark.css'
 
 //& Code block with a "Copy" button
@@ -43,21 +44,22 @@ const components: Components = {
   // your IP address to whoever hosts it (classic tracker). We show a link instead.
   img: ({ src, alt }) => (
     <a href={typeof src === 'string' ? src : undefined} target="_blank" rel="noreferrer">
-      🖼 {alt || 'image'}
+      <Icon name="image" size={16} className="md__img-icon" /> {alt || 'image'}
     </a>
   )
 }
 
-export const Markdown = ({ text }: { text: string }) => (
+const REMARK = [remarkGfm, remarkBreaks]
+const REHYPE = [rehypeHighlight]
+
+// memo: parsing + highlighting is the most expensive part of a message; it is only redone when the text changes
+// (not when the window re-renders for a call, a splitter drag, a new message below…)
+export const Markdown = memo(({ text }: { text: string }) => (
   <div className="md">
     {/* react-markdown does NOT interpret raw HTML by default: a message
         containing <script> or <img onerror> is displayed as text. We keep it that way. */}
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkBreaks]}
-      rehypePlugins={[rehypeHighlight]}
-      components={components}
-    >
+    <ReactMarkdown remarkPlugins={REMARK} rehypePlugins={REHYPE} components={components}>
       {text}
     </ReactMarkdown>
   </div>
-)
+))

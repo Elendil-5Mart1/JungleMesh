@@ -26,6 +26,7 @@ import {
   watchJournal,
   deletedIds,
   findOwnMessage,
+  messagesOf,
   withoutDeleted,
   type JournalEntry,
   type SharedFile
@@ -326,17 +327,10 @@ export class RoomManager {
     if (!rt?.active) return []
     const ownerRaws = await readRaw(rt.ownerCore)
     const messages = withoutDeleted(ownerRaws, this.ownerEntriesToMessages(rt, ownerRaws, 0), rt.saved.owner)
-    const others: [string, any][] = [...rt.cores]
+    // Removed members keep their (still watched) log in rt.cores: their messages are no longer shown
+    const others: [string, any][] = [...rt.cores].filter(([author]) => rt.members.has(author))
     if (rt.myCore && rt.myCore !== rt.ownerCore) others.push([this.host.me().key, rt.myCore])
-    for (const [author, core] of others) {
-      const raws = await readRaw(core)
-      const list: ChatMessage[] = []
-      for (const raw of raws) {
-        const msg = toMessage(raw, author)
-        if (msg) list.push(msg)
-      }
-      messages.push(...withoutDeleted(raws, list, author))
-    }
+    for (const [author, core] of others) messages.push(...messagesOf(await readRaw(core), author))
     return messages.sort((a, b) => a.ts - b.ts)
   }
 
@@ -563,8 +557,9 @@ export class RoomManager {
 
       if (entry?.type === 'member-remove') {
         if (typeof entry.key !== 'string' || !HEX_KEY.test(entry.key) || entry.key === rt.saved.owner) continue
+        // Their log stays in rt.cores (already watched): forgetting it would make a second watcher if they
+        // come back, and every message would then be notified twice. post() and getHistory() hide it.
         rt.members.delete(entry.key)
-        rt.cores.delete(entry.key) // their messages are no longer displayed
         rt.removedAt.set(entry.key, ts)
         if (entry.key === me) {
           // Removed (or I had left): the room disappears from my app
@@ -671,12 +666,7 @@ export class RoomManager {
 
   private async emitFrom(rt: RoomRuntime, core: any, author: string, from: number): Promise<void> {
     const raws = await readRaw(core, from)
-    const messages: ChatMessage[] = []
-    for (const raw of raws) {
-      const msg = toMessage(raw, author)
-      if (msg) messages.push(msg)
-    }
-    for (const msg of withoutDeleted(raws, messages, author)) this.post(rt, msg)
+    for (const msg of messagesOf(raws, author)) this.post(rt, msg)
     for (const id of deletedIds(raws, author)) this.postDeleted(rt, id, author)
   }
 

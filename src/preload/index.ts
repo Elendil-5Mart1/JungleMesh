@@ -63,6 +63,32 @@ const api: ChatApi = {
     ipcRenderer.on('unread:changed', listener)
     return () => ipcRenderer.removeListener('unread:changed', listener)
   },
+  onNotifySound: (cb) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('notify:sound', listener)
+    return () => ipcRenderer.removeListener('notify:sound', listener)
+  },
+  onNotifyRing: (cb) => {
+    const listener = (_e: IpcRendererEvent, on: boolean): void => cb(on)
+    ipcRenderer.on('notify:ring', listener)
+    return () => ipcRenderer.removeListener('notify:ring', listener)
+  },
+  pickSound: (kind) => ipcRenderer.invoke('sound:pick', kind),
+  resetSound: (kind) => ipcRenderer.invoke('sound:reset', kind),
+  getSound: (kind) => ipcRenderer.invoke('sound:get', kind),
+  callAccept: (key) => ipcRenderer.invoke('call:accept', key),
+  callDecline: (key) => ipcRenderer.invoke('call:decline', key),
+  callTakeAutoJoin: (key) => ipcRenderer.invoke('call:takeAutoJoin', key),
+  onCallAutoJoin: (cb) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('call:autojoin', listener)
+    return () => ipcRenderer.removeListener('call:autojoin', listener)
+  },
+  onCallDeclined: (cb) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('call:declined', listener)
+    return () => ipcRenderer.removeListener('call:declined', listener)
+  },
   getPendingInvite: () => ipcRenderer.invoke('invite:pending'),
   clearPendingInvite: () => ipcRenderer.invoke('invite:clear'),
   onInviteLink: (cb) => {
@@ -92,6 +118,8 @@ const api: ChatApi = {
   voiceJoin: (room, chan) => ipcRenderer.invoke('voice:join', room, chan),
   voiceLeave: () => ipcRenderer.invoke('voice:leave'),
   voiceSignal: (to, room, chan, data) => ipcRenderer.invoke('voice:signal', to, room, chan, data),
+  screenSources: () => ipcRenderer.invoke('screen:sources'),
+  screenChoose: (sourceId, audio) => ipcRenderer.invoke('screen:choose', sourceId, audio),
   onVoiceSignal: (cb) => {
     const listener = (_e: IpcRendererEvent, signal: VoiceSignal): void => cb(signal)
     ipcRenderer.on('voice:signal', listener)

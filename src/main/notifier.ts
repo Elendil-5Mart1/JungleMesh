@@ -19,6 +19,8 @@ interface NotifierDeps {
   myKey: () => string
   describe: (convId: string, msg: ChatMessage) => ConvInfo
   openHome: () => void
+  openIncoming: (key: string) => void // incoming call popup
+  closeIncoming: (key: string) => void
   settings: () => AppSettings
   onChange: (unread: UnreadCounts) => void // notify the windows (badges)
 }
@@ -57,19 +59,84 @@ export const createNotifier = (deps: NotifierDeps) => {
     for (const win of allWindows()) win.setOverlayIcon(n > 0 ? dot : null, n > 0 ? t('tray.unread', { count: n }) : '')
   }
 
+  // A friend coming back online delivers all their waiting messages in one go: the counters change
+  // N times in the same turn, but the file, the badge and the windows are only updated once
+  let flushQueued = false
   const changed = (): void => {
-    try {
-      writeFileSync(file, JSON.stringify(unread))
-    } catch (err) {
-      console.error('unread: write failed', err)
-    }
-    applyOverlay()
-    deps.onChange({ ...unread })
+    if (flushQueued) return
+    flushQueued = true
+    setImmediate(() => {
+      flushQueued = false
+      try {
+        writeFileSync(file, JSON.stringify(unread))
+      } catch (err) {
+        console.error('unread: write failed', err)
+      }
+      applyOverlay()
+      deps.onChange({ ...unread })
+    })
   }
 
-  const notify = (title: string, body: string, onClick: () => void): void => {
+  // One toast per conversation every few seconds at most (the next ones would only pile up in the action center)
+  const TOAST_GAP_MS = 4000
+  const lastToast = new Map<string, number>()
+  const toastAllowed = (convId: string): boolean => {
+    const now = Date.now()
+    if (now - (lastToast.get(convId) ?? 0) < TOAST_GAP_MS) return false
+    lastToast.set(convId, now)
+    return true
+  }
+
+  // Our own notification sound, played by a window (the main process cannot play audio).
+  // At most one every 800 ms: a burst of messages makes one sound, not ten. false = no window to play it.
+  let lastSound = 0
+  const playSound = (): boolean => {
+    if (!deps.settings().notifSound) return true // sound off: and not the Windows one either
+    const win = getWindow('home') ?? allWindows()[0]
+    if (!win) return false
+    const now = Date.now()
+    if (now - lastSound > 800) win.webContents.send('notify:sound')
+    lastSound = now
+    return true
+  }
+
+  // Incoming call: a friend is in our 1-to-1 call and I am not (yet). A popup per caller
+  // (Join / Decline), and one window rings, like the notification sound.
+  const ringing = new Set<string>() // keys of the friends calling me
+  const declined = new Set<string>() // calls refused: silent until this friend leaves the call
+  let ringWindow: BrowserWindow | null = null
+  let lastState: CoreState | null = null
+  const updateRing = (state: CoreState): void => {
+    lastState = state
+    const me = deps.myKey()
+    const calling = state.friends
+      .filter((f) => f.status === 'accepted' && f.call.includes(f.key) && !f.call.includes(me) && !deps.settings().muted.includes(f.key))
+      .map((f) => f.key)
+    for (const key of declined) if (!calling.includes(key)) declined.delete(key) // call over: may ring again next time
+    const now = new Set(calling.filter((key) => !declined.has(key)))
+    for (const key of now) {
+      if (ringing.has(key)) continue
+      deps.openIncoming(key)
+      const home = getWindow('home')
+      if (home && !home.isFocused() && deps.settings().flash) home.flashFrame(true)
+    }
+    for (const key of ringing) if (!now.has(key)) deps.closeIncoming(key) // answered, refused or hung up
+    ringing.clear()
+    for (const key of now) ringing.add(key)
+    const ring = ringing.size > 0 && deps.settings().ringtone
+    if (ring && !ringWindow) {
+      ringWindow = getWindow('home') ?? allWindows()[0] ?? null
+      ringWindow?.webContents.send('notify:ring', true)
+    } else if (!ring && ringWindow) {
+      if (!ringWindow.isDestroyed()) ringWindow.webContents.send('notify:ring', false)
+      ringWindow = null
+    }
+  }
+
+  // `silent`: our own sound already played (otherwise Windows plays its default toast sound)
+  const notify = (title: string, body: string, onClick: () => void, silent = false): void => {
     if (!Notification.isSupported()) return
-    const n = new Notification({ title, body, silent: false })
+    const n = new Notification({ title, body, silent })
     alive.add(n)
     n.on('click', () => {
       alive.delete(n)
@@ -98,7 +165,11 @@ export const createNotifier = (deps: NotifierDeps) => {
       // Conversation windows have no button: the home window is the one that flashes
       const home = getWindow('home')
       if (home && !home.isFocused() && deps.settings().flash) home.flashFrame(true)
-      if (!appFocused() && deps.settings().notifications) notify(conv.title, deps.settings().hideNotificationContent ? t('notif.newMessage') : preview(msg.file ? `📎 ${msg.file.name}` : msg.text), conv.open)
+      const played = playSound()
+      if (!appFocused() && deps.settings().notifications && toastAllowed(convId)) {
+        const body = deps.settings().hideNotificationContent ? t('notif.newMessage') : preview(msg.file ? `📎 ${msg.file.name}` : msg.text)
+        notify(conv.title, body, conv.open, played)
+      }
     },
 
     // A conversation comes to the foreground → its messages are read
@@ -119,10 +190,19 @@ export const createNotifier = (deps: NotifierDeps) => {
         if (knownInvites.has(id)) continue
         knownInvites.add(id)
         const title = t(id.startsWith('room:') ? 'notif.roomInviteTitle' : 'notif.friendRequestTitle')
-        if (!silent && !appFocused() && deps.settings().notifications) notify(title, text, deps.openHome)
+        if (silent) continue
+        const played = playSound()
+        if (!appFocused() && deps.settings().notifications) notify(title, text, deps.openHome, played)
       }
       // Accepted or declined: we forget it (it may notify again later)
       for (const id of knownInvites) if (!current.has(id)) knownInvites.delete(id)
+      updateRing(state)
+    },
+
+    // "Decline" in the popup: this call stops ringing here (the caller is not told, they just wait)
+    decline(key: string): void {
+      declined.add(key)
+      if (lastState) updateRing(lastState)
     },
 
     // When a window opens: apply the current badge to it

@@ -7,6 +7,7 @@ import { HomeView } from '@/views/HomeView'
 import { ChatView } from '@/views/ChatView'
 import { RoomView } from '@/views/RoomView'
 import { SettingsView } from '@/views/SettingsView'
+import { IncomingCallView } from '@/views/IncomingCallView'
 import { WindowFrame } from '@/components/WindowFrame'
 import '@fontsource/ibm-plex-sans/400.css'
 import '@fontsource/ibm-plex-sans/500.css'
@@ -20,12 +21,13 @@ i18n.use(initReactI18next)
 void setupI18n()
 
 // No need for react-router: a window's route never changes after opening
-const route = window.location.hash.slice(1) // "/home", "/settings", "/chat/<key>" or "/room/<key>"
-const [, kind, key] = route.match(/^\/(chat|room)\/([0-9a-f]{64})$/) ?? []
+const route = window.location.hash.slice(1) // "/home", "/settings", "/chat/<key>", "/room/<key>" or "/incoming/<key>"
+const [, kind, key] = route.match(/^\/(chat|room|incoming)\/([0-9a-f]{64})$/) ?? []
 
 const View = () => {
   if (kind === 'chat') return <ChatView friendKey={key} />
   if (kind === 'room') return <RoomView roomKey={key} />
+  if (kind === 'incoming') return <IncomingCallView friendKey={key} />
   if (route === '/settings') return <SettingsView />
   return <HomeView />
 }

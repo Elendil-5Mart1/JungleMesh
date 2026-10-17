@@ -43,7 +43,8 @@ const startResize = (edge: string, e: PointerEvent<HTMLElement>): void => {
 
 interface WindowFrameProps {
   children: ReactNode
-  kind?: string // 'chat': the bar carries the friend's name; 'room': empty bar (the room has its own header)
+  kind?: string // 'chat': the bar carries the friend's name; 'room': empty bar (the room has its own header);
+  // 'incoming': call popup, fixed size (no minimize, no resize handles)
 }
 
 export const WindowFrame = ({ children, kind }: WindowFrameProps) => {
@@ -56,16 +57,18 @@ export const WindowFrame = ({ children, kind }: WindowFrameProps) => {
         {!kind && <img className="titlebar__logo" src={logo} alt="" aria-hidden />}
         <span className="titlebar__title">{kind === 'room' ? '' : title}</span>
         <div className="titlebar__buttons">
-          <button
-            type="button"
-            className="titlebar__btn"
-            aria-label={t('window.minimize')}
-            onClick={() => window.api.windowMinimize()}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
-              <path d="M2 6h8" />
-            </svg>
-          </button>
+          {kind !== 'incoming' && (
+            <button
+              type="button"
+              className="titlebar__btn"
+              aria-label={t('window.minimize')}
+              onClick={() => window.api.windowMinimize()}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+                <path d="M2 6h8" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             className="titlebar__btn titlebar__btn--close"
@@ -85,7 +88,7 @@ export const WindowFrame = ({ children, kind }: WindowFrameProps) => {
       <svg className="frame__corner" width="18" height="18" viewBox="0 0 18 18" aria-hidden>
         <line x1="20.5" y1="-1.2" x2="-1.2" y2="20.5" stroke="currentColor" strokeWidth="1" />
       </svg>
-      {GRIPS.map((edge) => (
+      {kind !== 'incoming' && GRIPS.map((edge) => (
         <span key={edge} className={`grip grip--${edge}`} onPointerDown={(e) => startResize(edge, e)} aria-hidden />
       ))}
     </div>

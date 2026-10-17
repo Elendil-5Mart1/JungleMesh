@@ -10,8 +10,14 @@ import { RoomSettings } from '@/components/RoomSettings'
 import { useTranslation } from 'react-i18next'
 import { cleanError } from '@/utils/errors'
 import { useVoice } from '@/voice/useVoice'
+import { useVideoStats, statLines } from '@/voice/useVideoStats'
+import { screenTiles } from '@/voice/screenTiles'
+import { CallStage, type StageMember } from '@/components/CallStage'
+import { CallControls } from '@/components/CallControls'
+import { VoiceRing } from '@/components/VoiceRing'
 import { Splitter, useColumnWidth } from '@/components/Splitter'
 import { ContextMenu, MenuItem, type MenuSpot } from '@/components/ContextMenu'
+import { Icon } from '@/components/Icon'
 import { getVoiceVolume, saveVoiceVolume } from '@/utils/voiceVolume'
 import { sendMessage } from '@/utils/sendMessage'
 
@@ -37,7 +43,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
   const friends = useCoreStore((s) => s.friends) ?? EMPTY
   const messages = useCoreStore((s) => s.messages[roomKey] ?? EMPTY)
   const settings = useCoreStore((s) => s.settings)
-  const setHistory = useCoreStore((s) => s.setHistory)
+  const loadHistory = useCoreStore((s) => s.loadHistory)
 
   const [channelId, setChannelId] = useState(() => loadLastChannel(roomKey))
   const [creating, setCreating] = useState<ChannelKind | null>(null) // "new channel" form
@@ -55,11 +61,13 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
 
   // Voice call (only one channel at a time): microphone + WebRTC connections with the other participants
   const voice = useVoice(roomKey, me?.publicKey, room?.voice)
+  const [showStats, setShowStats] = useState(false) // video diagnostic on the tiles
+  const videoStats = useVideoStats(voice.session, showStats && !!voice.activeChan)
 
   // History reloads when the status changes (e.g. "joining" → "joined")
   useEffect(() => {
-    void window.api.getHistory(roomKey).then((list) => setHistory(roomKey, list))
-  }, [roomKey, room?.status, setHistory])
+    void loadHistory(roomKey)
+  }, [roomKey, room?.status, loadHistory])
 
   useEffect(() => {
     if (room) document.title = room.name
@@ -161,17 +169,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
 
   // Green ring around the avatar of someone who is speaking (only visible if we are in this channel)
   const renderRing = (key: string, avatar: React.ReactNode) => (
-    <span className={`voice-ring ${voice.status?.speaking.includes(key) ? 'voice-ring--speaking' : ''}`}>
-      {avatar}
-      {/* When the person speaks: the inside of the bubble becomes an animated wave on a black background */}
-      {voice.status?.speaking.includes(key) && (
-        <span className="voice-wave" aria-hidden>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <span key={i} className="voice-wave__bar" style={{ animationDelay: `${i * 0.11}s` }} />
-          ))}
-        </span>
-      )}
-    </span>
+    <VoiceRing speaking={voice.status?.speaking.includes(key)}>{avatar}</VoiceRing>
   )
 
   // A group of channels in the navigation (text or voice).
@@ -188,7 +186,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
             title={t(kind === 'text' ? 'room.createText' : 'room.createVoice')}
             onClick={() => setCreating(creating === kind ? null : kind)}
           >
-            {creating === kind ? '×' : '+'}
+            <Icon name={creating === kind ? 'close' : 'plus'} size={16} />
           </button>
         )}
       </h2>
@@ -211,7 +209,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
               className={`room-nav__channel ${c.id === channel.id ? 'room-nav__channel--active' : ''} ${unseen ? 'room-nav__channel--unread' : ''}`}
               onClick={() => openChannel(c)}
             >
-              <span className="room-nav__icon">{c.kind === 'text' ? '#' : '🔊'}</span>
+              <span className="room-nav__icon">{c.kind === 'text' ? '#' : <Icon name="volume" size={16} />}</span>
               <span className="room-nav__name">{c.name}</span>
             </button>
             {/* Who is in this voice channel */}
@@ -260,7 +258,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
                 title={t('room.inviteFriends')}
                 onClick={() => setInviting(!inviting)}
               >
-                👤+
+                <Icon name="userPlus" size={18} />
               </button>
             )}
             <button
@@ -269,7 +267,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
               title={t('roomSettings.title')}
               onClick={() => setSettingsOpen(true)}
             >
-              ⚙
+              <Icon name="settings" size={18} />
             </button>
           </div>
         </header>
@@ -307,10 +305,10 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
         {voice.activeChan && (
           <div className="voice-bar">
             <span className="voice-bar__where">
-              🔊 {room.channels.find((c) => c.id === voice.activeChan)?.name ?? t('room.voice')}
+              <Icon name="volume" size={16} /> {room.channels.find((c) => c.id === voice.activeChan)?.name ?? t('room.voice')}
             </span>
             <button type="button" className="voice__btn voice__btn--leave" title={t('room.hangUp')} onClick={voice.leave}>
-              ✕
+              <Icon name="close" size={16} />
             </button>
           </div>
         )}
@@ -328,11 +326,9 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
       {/*& Center: the selected channel */}
       <div className="chat room__chat">
         <header className="chat__header">
-          <span className="room__hash">{channel.kind === 'text' ? '#' : '🔊'}</span>
+          <span className="room__hash">{channel.kind === 'text' ? '#' : <Icon name="volume" size={20} />}</span>
           <h1>{channel.name}</h1>
-          <span className="room__count">
-            {online.length}/{room.members.length} en ligne
-          </span>
+          <span className="room__count">{t('room.onlineCount', { online: online.length, total: room.members.length })}</span>
         </header>
 
         {error && <p className="chat__error">{error}</p>}
@@ -342,64 +338,59 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
 
         {channel.kind === 'voice' ? (
           <div className="voice">
-            <div className="voice__users">
-              {(room.voice[channel.id] ?? []).map((key) => {
+            {/* Participants: bubbles, or videos with click-to-focus (same stage as the private calls) */}
+            <CallStage
+              fill
+              onMemberMenu={openMenu}
+              members={[...(room.voice[channel.id] ?? []).map((key): StageMember => {
                 const a = author(key)
                 const inCall = voice.activeChan === channel.id
-                const link = voice.status?.links[key]
-                return (
-                  <div key={key} className="voice__user" onContextMenu={openMenu(key)}>
-                    {renderRing(key, <Avatar src={a.avatar} name={a.name} seed={key} size={72} />)}
-                    <span>{a.name}</span>
-                    {inCall && key !== me?.publicKey && (
-                      <span className={`voice__link voice__link--${link ?? 'connecting'}`}>
-                        {t(`room.link.${link ?? 'connecting'}`)}
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            {(room.voice[channel.id]?.length ?? 0) === 0 && (
-              <p className="voice__hint">{t('room.nobody', { name: channel.name })}</p>
-            )}
-            {voice.error && <p className="chat__error">{voice.error}</p>}
-            {voice.status?.phase === 'live' && voice.activeChan === channel.id ? (
-              <div className="voice__controls">
+                const isMe = key === me?.publicKey
+                const link = voice.status?.links[key] ?? 'connecting'
+                return {
+                  key,
+                  name: a.name,
+                  avatar: a.avatar,
+                  video: inCall ? (isMe ? voice.status?.localVideo : voice.status?.videos[key]) : null,
+                  mirror: isMe && (settings?.mirrorCamera ?? true),
+                  speaking: inCall && voice.status?.speaking.includes(key),
+                  note: inCall && !isMe ? t(`room.link.${link}`) : undefined,
+                  noteKind: link,
+                  stats: showStats && !isMe ? statLines(videoStats[key]) : undefined
+                }
+              }),
+              // Shared screens (only seen from inside the call), after the people
+              ...(voice.activeChan === channel.id && me
+                ? screenTiles(
+                    voice,
+                    (room.voice[channel.id] ?? []).map((key) => ({ key, ...author(key) })),
+                    me.publicKey,
+                    showStats ? videoStats : undefined
+                  )
+                : [])]}
+            >
+              {(room.voice[channel.id]?.length ?? 0) === 0 && (
+                <p className="voice__hint">{t('room.nobody', { name: channel.name })}</p>
+              )}
+              {voice.error && <p className="chat__error">{voice.error}</p>}
+              {voice.status?.phase === 'live' && voice.activeChan === channel.id ? (
+                <CallControls voice={voice} showStats={showStats} onToggleStats={() => setShowStats((on) => !on)} />
+              ) : (
                 <button
                   type="button"
-                  className={`voice__btn ${voice.status.muted ? 'voice__btn--off' : ''}`}
-                  title={voice.status.muted ? t('room.unmute') : t('room.mute')}
-                  onClick={() => voice.session.current?.setMuted(!voice.status?.muted)}
+                  className="voice__btn voice__btn--join"
+                  disabled={room.status !== 'joined' || voice.activeChan === channel.id}
+                  onClick={() => void voice.join(channel.id)}
                 >
-                  {voice.status.muted ? '🔇' : '🎤'}
+                  {voice.activeChan === channel.id ? t('room.connecting') : t('room.joinVoice')}
                 </button>
-                <button
-                  type="button"
-                  className={`voice__btn ${voice.status.deafened ? 'voice__btn--off' : ''}`}
-                  title={voice.status.deafened ? t('room.undeafen') : t('room.deafen')}
-                  onClick={() => voice.session.current?.setDeafened(!voice.status?.deafened)}
-                >
-                  {voice.status.deafened ? '🙉' : '🎧'}
-                </button>
-                <button type="button" className="voice__btn voice__btn--leave" title={t('room.hangUp')} onClick={voice.leave}>
-                  {t('room.leaveCall')}
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="voice__btn voice__btn--join"
-                disabled={room.status !== 'joined' || voice.activeChan === channel.id}
-                onClick={() => void voice.join(channel.id)}
-              >
-                {voice.activeChan === channel.id ? t('room.connecting') : t('room.joinVoice')}
-              </button>
-            )}
+              )}
+            </CallStage>
           </div>
         ) : (
           <>
             <MessageList
+              key={channel.id} // another channel = a fresh list (scrolled to its bottom)
               messages={byChannel[channel.id] ?? EMPTY}
               myKey={me?.publicKey}
               author={author}
@@ -453,7 +444,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
                       <span className="members__name">{m.name}</span>
                       {m.isOwner && (
                         <span className="members__owner" title={t('room.owner')}>
-                          👑
+                          <Icon name="crown" size={14} />
                         </span>
                       )}
                     </div>

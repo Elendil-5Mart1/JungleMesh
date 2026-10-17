@@ -69,6 +69,11 @@
     }
   }
 
+  // Pictogram of an image that is not loaded (link instead)
+  &__img-icon {
+    vertical-align: -3px;
+  }
+
   &__copy {
     position: absolute;
     top: $space * 0.5;

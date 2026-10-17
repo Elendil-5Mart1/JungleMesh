@@ -1,6 +1,7 @@
 //* Input area: Enter sends, Shift+Enter inserts a line break (like Discord)
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Icon } from '@/components/Icon'
 
 // Loaded on first opening: the emoji data is heavy and rarely needed at startup
 const EmojiPicker = lazy(() => import('./EmojiPicker'))
@@ -115,7 +116,7 @@ export const Composer = ({ disabled, placeholder, onSend, attachable }: Composer
         <div className="composer__staged">
           {staged.map((file, i) => (
             <div key={`${file.name}-${i}`} className="composer__chip">
-              {previews[i] ? <img src={previews[i]!} alt="" /> : <span aria-hidden>📄</span>}
+              {previews[i] ? <img src={previews[i]!} alt="" /> : <Icon name="file" size={18} />}
               <span className="composer__chip-name" title={file.name}>
                 {file.name}
               </span>
@@ -125,7 +126,7 @@ export const Composer = ({ disabled, placeholder, onSend, attachable }: Composer
                 title={t('composer.removeFile')}
                 onClick={() => setStaged(staged.filter((_, j) => j !== i))}
               >
-                ×
+                <Icon name="close" size={14} />
               </button>
             </div>
           ))}

@@ -1,0 +1,278 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Call stage (CallStage.tsx): participants as bubbles or videos, focus mode, call buttons underneath
+
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $space * 1.5;
+  padding: $space * 2;
+  background: glass($bg-deep);
+  border-bottom: 1px solid $line;
+
+  //& Heights
+  // Band at the top of a private conversation: compact, or taller (▾ button)
+  &--band {
+    flex: 0 0 auto;
+    height: 260px;
+  }
+
+  &--tall {
+    flex: 0 0 auto;
+    height: 62vh;
+  }
+
+  // Bubbles only: the band takes just the height it needs
+  &--bubbles.stage--band,
+  &--bubbles.stage--tall {
+    height: auto;
+  }
+
+  // Voice channel: the stage takes the whole central panel
+  &--fill {
+    flex: 1;
+    align-self: stretch;
+    min-height: 0;
+    background: none;
+    border-bottom: none;
+  }
+
+  // Full screen (⛶ button): the stage covers the whole screen
+  &:fullscreen {
+    height: 100vh;
+    padding: $space * 3;
+    background: $bg-deep;
+  }
+
+  //& Buttons at the top right (height, full screen)
+  &__tools {
+    position: absolute;
+    top: $space;
+    right: $space;
+    z-index: 1;
+    display: flex;
+    gap: $space * 0.5;
+  }
+
+  &__tool {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: rgba($bg-soft, 0.85);
+    border: 1px solid $border;
+    border-radius: $radius;
+    color: $text-muted;
+    font-size: 0.9em;
+
+    &:hover {
+      color: $accent-bright;
+      border-color: $accent;
+    }
+  }
+
+  //& Participants
+  &__tiles {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+
+    // Nobody has a camera: bubbles side by side, centered
+    &--bubbles {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: $space * 4;
+    }
+
+    // At least one camera: grid of equal tiles (columns / rows computed in CallStage)
+    &--grid {
+      display: grid;
+      gap: $space;
+    }
+  }
+
+  &__tile {
+    min-width: 0;
+    min-height: 0;
+    cursor: default;
+
+    // A tile can be put forward as soon as there is video
+    .stage--grid &,
+    .stage--focus & {
+      cursor: pointer;
+    }
+
+    // The camera image is never cropped nor stretched: whole, with black bars if its ratio differs
+    // (e.g. a phone held upright)
+    .video-tile__video {
+      object-fit: contain;
+      background: #000;
+    }
+
+    // Grid cell: the tile is the largest 16:9 frame that fits in it.
+    // The cell is a "size container": 100cqw / 100cqh = its width / height (CSS container queries).
+    .stage__tiles--grid > &--grid {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      container-type: size;
+
+      > .video-tile,
+      > .stage__card {
+        width: min(100cqw, 100cqh * 16 / 9);
+        height: auto;
+        aspect-ratio: 16 / 9;
+      }
+    }
+
+    // Tile in focus: same rule, on the whole available area
+    &--main {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 0;
+      container-type: size;
+
+      > .video-tile,
+      > .stage__card {
+        width: min(100cqw, 100cqh * 16 / 9);
+        height: auto;
+        aspect-ratio: 16 / 9;
+      }
+    }
+
+    // Thumbnails of the strip, under the tile in focus
+    &--small {
+      flex: 0 0 auto;
+      width: 128px;
+      height: 72px;
+
+      .video-tile {
+        height: 100%;
+      }
+
+      .video-tile__name {
+        left: 4px;
+        bottom: 4px;
+        font-size: 0.7em;
+      }
+    }
+
+    &:hover .video-tile,
+    &:hover .stage__card:not(.stage__card--bubble) {
+      outline: 1px solid $border;
+    }
+  }
+
+  //& Participant without camera
+  // Tile with the avatar in the middle (when others have a camera)
+  &__card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: $space;
+    width: 100%;
+    height: 100%;
+    background: $bg-soft;
+    border-radius: $radius;
+    color: $text;
+    font-size: 0.9em;
+    text-align: center;
+
+    // Nobody has a camera: just the bubble and the name (Discord voice style)
+    &--bubble {
+      width: auto;
+      height: auto;
+      max-width: 120px;
+      background: none;
+    }
+  }
+
+  //& Shared screen
+  // Not watched: dark tile with the LIVE badge and the "Watch" button
+  &__card--screen {
+    background: $bg-deep;
+    border: 1px solid $border;
+  }
+
+  &__live {
+    padding: 2px $space * 0.75;
+    background: $danger;
+    border-radius: $radius;
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  &__watch {
+    @include chamfer(8px);
+    padding: $space * 0.6 $space * 1.5;
+    background: $accent;
+    border: none;
+    color: $on-accent;
+
+    .stage__tile--small & {
+      padding: 2px $space;
+    }
+  }
+
+  // Watched: small button over the image, visible on hover
+  &__unwatch {
+    position: absolute;
+    top: $space;
+    left: $space;
+    padding: $space * 0.4 $space;
+    background: rgba($bg-soft, 0.85);
+    border: 1px solid $border;
+    border-radius: $radius;
+    color: $text;
+    font-size: 0.8em;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    .video-tile:hover & {
+      opacity: 1;
+    }
+  }
+
+  &__name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  //& Focus mode: big tile + strip of thumbnails
+  &__focus {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $space;
+    width: 100%;
+    min-height: 0;
+  }
+
+  &__strip {
+    display: flex;
+    justify-content: center;
+    gap: $space;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  // Buttons (mute, camera…) and hints under the participants
+  .voice__controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

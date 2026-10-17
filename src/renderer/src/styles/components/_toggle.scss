@@ -2,6 +2,9 @@
 
 //* Switch: the real checkbox is hidden, the drawn track follows its state
 .toggle {
+  // Repère de la case cachée : sans lui elle se rattache à .frame, hors de la zone qui défile,
+  // et son focus fait défiler le body (interface décalée vers le haut)
+  position: relative;
   display: flex;
   align-items: center;
   gap: $space * 2;
@@ -24,6 +27,8 @@
 
   input {
     position: absolute;
+    top: 0;
+    left: 0;
     opacity: 0;
     pointer-events: none;
   }

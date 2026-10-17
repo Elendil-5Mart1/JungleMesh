@@ -47,6 +47,19 @@
     }
   }
 
+  // Call event (DM): same discreet line, with a phone and the time
+  &--call {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: $space * 0.75;
+
+    time {
+      opacity: 0.7;
+      font-size: 0.9em;
+    }
+  }
+
   &__author--me {
     color: $accent;
   }

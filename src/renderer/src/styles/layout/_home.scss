@@ -19,7 +19,7 @@
     align-items: center;
     gap: $space * 1.5;
     padding: $space * 2;
-    background: $bg-deep;
+    background: glass($bg-deep);
     // Turquoise line that fades out (signature of the theme)
     border-bottom: 1px solid transparent;
     border-image: linear-gradient(90deg, rgba($accent, 0.55), transparent 75%) 1;
@@ -53,15 +53,44 @@
     }
   }
 
+  // My name: plain text with a pencil next to it; a field only while editing
+  &__name-row {
+    display: flex;
+    align-items: center;
+    gap: $space * 0.5;
+    min-width: 0;
+  }
+
   &__name {
-    @include field;
-    background: transparent;
+    overflow: hidden;
+    padding: $space * 0.5;
     font-size: 1.15em;
     font-weight: 600;
-    padding: $space * 0.5;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &--editing {
+      @include field;
+      padding: $space * 0.5;
+      font-size: 1.15em;
+      font-weight: 600;
+    }
+  }
+
+  &__edit {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: $radius;
+    color: $text-muted;
 
     &:hover {
-      background: $bg-input;
+      color: $accent;
     }
   }
 
@@ -194,6 +223,22 @@
     white-space: nowrap;
   }
 
+  // In a call with this friend (speaker), or friend calling me (phone that shakes, waves that blink)
+  &__call {
+    display: flex;
+    flex-shrink: 0;
+    color: $accent;
+
+    &--ringing svg {
+      transform-origin: 50% 60%;
+      animation: ring-shake 1.25s ease-in-out infinite;
+    }
+
+    &--ringing .icon__waves {
+      animation: ring-waves 1.25s steps(1) infinite;
+    }
+  }
+
   &__pending {
     margin-left: auto;
     font-size: 0.75em;
@@ -213,6 +258,18 @@
     line-height: 18px;
     text-align: center;
   }
+}
+
+// Ringing: quick shake, then a pause (like a phone that vibrates in bursts)
+@keyframes ring-shake {
+  0%, 50%, 100% { transform: rotate(0); }
+  5%, 15%, 25%, 35% { transform: rotate(-14deg); }
+  10%, 20%, 30%, 40% { transform: rotate(14deg); }
+}
+
+@keyframes ring-waves {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 //* Friend requests and room invitations

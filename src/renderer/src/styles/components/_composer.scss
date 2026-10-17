@@ -64,7 +64,8 @@
     border: 1px solid $border;
     border-radius: 50%;
     color: $danger;
-    line-height: 1;
+    display: grid;
+    place-items: center;
   }
 
   &__error {

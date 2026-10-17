@@ -9,6 +9,7 @@
 @use 'layout/chat';
 @use 'layout/room';
 @use 'layout/settings';
+@use 'layout/incoming';
 
 //& Components
 @use 'components/status';
@@ -19,5 +20,7 @@
 @use 'components/toggle';
 @use 'components/modal';
 @use 'components/voice';
+@use 'components/stage';
+@use 'components/picker';
 @use 'components/context-menu';
 @use 'components/attachment';

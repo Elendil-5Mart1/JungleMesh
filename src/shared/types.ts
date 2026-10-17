@@ -69,6 +69,7 @@ export interface ChatMessage {
   channel?: string // channel of a room ('general' if missing)
   file?: { core: string; name: string; size: number; mime: string; image: boolean } // attachment (image or other file)
   system?: boolean // informational message ("X joined the room"), not written by a human
+  call?: CallEvent // DM call event (system line, its text is built by the window with the author's name)
 }
 
 // conversation key (friend or room) → number of unread messages (missing = 0)
@@ -80,15 +81,32 @@ export interface CoreState {
   rooms: Room[]
 }
 
+// Call events written in the DM history (only "declined" for now)
+export type CallEvent = 'declined'
+
+// Blur behind the windows (Windows 11): none, Pearl (frosted glass + pearly sheen drawn in CSS), Acrylic (frosted glass)
+export type WindowMaterial = 'none' | 'pearl' | 'acrylic'
+
+// Sounds the user can replace with their own file
+export type SoundKind = 'notif' | 'ring'
+
 //& App settings (settings.json, specific to this device)
 export interface AppSettings {
   notifications: boolean // Windows toasts for messages, requests and invitations
   flash: boolean // the home window flashes in the taskbar on a new message
+  notifSound: boolean // short sound on a new message / request (muted conversations stay silent)
+  ringtone: boolean // rings when a friend calls me (muted friends stay silent)
+  notifSoundFile: string // name of the custom notification sound ('' = default sound), file in userData/sounds
+  ringtoneFile: string // same for the ringtone
+  windowOpacity: number // opacity of the window backgrounds, in % (30 → 100, 100 = opaque)
+  windowMaterial: WindowMaterial // Windows 11 blur behind the translucent backgrounds
   launchAtStartup: boolean // launch the app at Windows sign-in
   canAutostart: boolean // read-only: false in dev (launch at startup targets the installed app)
   muted: string[] // keys of muted friends / rooms: no unread count, no toast, no flashing
   micId: string // chosen microphone ('' = the Windows default)
   speakerId: string // chosen audio output ('' = the Windows default)
+  camId: string // chosen camera ('' = the first one found)
+  mirrorCamera: boolean // my own camera preview is mirrored (display only: the others always receive it the right way round)
   echoCancellation: boolean // echo cancellation (native WebRTC)
   noiseSuppression: boolean // noise suppression (native WebRTC)
   autoGainControl: boolean // automatic microphone gain
@@ -109,6 +127,15 @@ export interface VoiceSignal {
   room: string
   chan: string
   data: unknown
+}
+
+// Screen or window that can be shared (listed by the main process, shown in our own picker)
+export interface ScreenSource {
+  id: string // e.g. "screen:0:0", "window:1234:0"
+  name: string
+  kind: 'screen' | 'window'
+  thumbnail: string // data URL (empty for a minimized window)
+  icon: string // application icon, data URL (windows only, may be empty)
 }
 
 //& What the preload exposes to the windows (window.api)
@@ -164,6 +191,20 @@ export interface ChatApi {
   onState: (cb: (state: CoreState) => void) => () => void
   onMessage: (cb: (convId: string, msg: ChatMessage) => void) => () => void
   onUnread: (cb: (unread: UnreadCounts) => void) => () => void
+  // The main process asks ONE window to play the notification sound (it has no audio of its own)
+  onNotifySound: (cb: () => void) => () => void
+  // Same for the ringtone of an incoming call: true = start ringing, false = stop
+  onNotifyRing: (cb: (on: boolean) => void) => () => void
+  // Custom sounds: file picker (copies the file into the profile), back to default, bytes to play
+  pickSound: (kind: SoundKind) => Promise<string | null>
+  resetSound: (kind: SoundKind) => Promise<void>
+  getSound: (kind: SoundKind) => Promise<Uint8Array | null>
+  // Incoming call popup: join (opens the friend's window, which joins) or decline (stops ringing here)
+  callAccept: (key: string) => Promise<void>
+  callDecline: (key: string) => Promise<void>
+  callTakeAutoJoin: (key: string) => Promise<boolean> // friend's window just opened from "Join"?
+  onCallAutoJoin: (cb: () => void) => () => void // "Join" while the friend's window was already open
+  onCallDeclined: (cb: () => void) => () => void // the friend I am calling refused (sent to their DM window)
   // Voice channels: the core handles presence and signaling, the window handles the audio (WebRTC)
   // Invite link received (junglemesh://add/<code>): code waiting for confirmation
   getPendingInvite: () => Promise<string | null>
@@ -178,4 +219,7 @@ export interface ChatApi {
   voiceLeave: () => Promise<void>
   voiceSignal: (to: string, roomKey: string, channelId: string, data: unknown) => Promise<void>
   onVoiceSignal: (cb: (signal: VoiceSignal) => void) => () => void
+  // Screen sharing: list the sources, then remember the chosen one just before getDisplayMedia
+  screenSources: () => Promise<ScreenSource[]>
+  screenChoose: (sourceId: string, audio: boolean) => Promise<void>
 }

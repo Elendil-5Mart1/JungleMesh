@@ -55,7 +55,7 @@
   flex-direction: column;
   width: var(--nav-w, 220px); // set by the room view (resizable)
   flex-shrink: 0;
-  background: $bg-soft;
+  background: glass($bg-soft);
 
   @media (max-width: 520px) {
     width: 64px; // narrow window: we only keep the icons
@@ -229,7 +229,7 @@
     align-items: center;
     gap: $space;
     padding: $space $space * 1.5;
-    background: $bg;
+    background: glass($bg);
     border-top: 1px solid $border;
   }
 }
@@ -273,7 +273,7 @@
   width: var(--members-w, 220px); // set by the room view (resizable)
   flex-shrink: 0;
   padding: $space;
-  background: $bg-soft;
+  background: glass($bg-soft);
   overflow-y: auto;
   @include thin-scrollbar;
 
@@ -310,6 +310,7 @@
   }
 
   &__owner {
-    font-size: 0.8em;
+    display: inline-flex;
+    color: $warn;
   }
 }

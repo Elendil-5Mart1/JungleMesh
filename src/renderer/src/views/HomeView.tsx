@@ -1,9 +1,10 @@
 //* Home window: profile, requests/invitations, rooms and friends
 // Each room and each friend opens in its own window.
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useCoreStore } from '@/stores/useCoreStore'
 import type { Friend } from '../../../shared/types'
 import { Avatar } from '@/components/Avatar'
+import { Icon } from '@/components/Icon'
 import { ContextMenu, MenuItem, type MenuSpot } from '@/components/ContextMenu'
 import { Welcome } from '@/components/Welcome'
 import { Trans, useTranslation } from 'react-i18next'
@@ -15,6 +16,50 @@ const EMPTY: never[] = []
 const Badge = ({ count }: { count?: number }) =>
   count ? <span className="list__badge">{count > 99 ? '99+' : count}</span> : null
 
+//& My name: plain text + pencil; the pencil (or a double click) turns it into a field.
+// Enter or leaving the field saves, Escape cancels.
+const NameEditor = ({ name }: { name: string }) => {
+  const { t } = useTranslation()
+  const [editing, setEditing] = useState(false)
+  const cancelled = useRef(false)
+
+  if (!editing) {
+    cancelled.current = false
+    return (
+      <div className="home__name-row">
+        <span className="home__name" onDoubleClick={() => setEditing(true)}>
+          {name}
+        </span>
+        <button type="button" className="home__edit" title={t('home.nameHint')} aria-label={t('home.nameHint')} onClick={() => setEditing(true)}>
+          <Icon name="pencil" size={15} />
+        </button>
+      </div>
+    )
+  }
+  const save = (value: string): void => {
+    setEditing(false)
+    if (cancelled.current) return
+    if (value.trim() && value.trim() !== name) void window.api.setName(value.trim())
+  }
+  return (
+    <input
+      className="home__name home__name--editing"
+      defaultValue={name}
+      maxLength={32}
+      autoFocus
+      onFocus={(e) => e.target.select()}
+      onBlur={(e) => save(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') {
+          cancelled.current = true // the blur that follows must not save
+          e.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
 export const HomeView = () => {
   const { t } = useTranslation()
   const me = useCoreStore((s) => s.me)
@@ -22,12 +67,14 @@ export const HomeView = () => {
   const rooms = useCoreStore((s) => s.rooms) ?? EMPTY
   const unread = useCoreStore((s) => s.unread)
   const visible = useCoreStore((s) => s.visibleWindows)
+  const muted = useCoreStore((s) => s.settings?.muted) ?? EMPTY
   // "--open" class if this friend's/room's window is on screen
   const openClass = (id: string): string => (visible.includes(id) ? 'list__item--open' : '')
 
   // Collapsible forms: "+" next to the section title
   const [adding, setAdding] = useState<'friend' | 'room' | null>(null)
-  const [menu, setMenu] = useState<{ friend: Friend; spot: MenuSpot } | null>(null) // right-click menu
+  // Right-click menu, on a friend or a room
+  const [menu, setMenu] = useState<{ key: string; name: string; friend?: Friend; spot: MenuSpot } | null>(null)
   const [code, setCode] = useState('')
   const [nickname, setNickname] = useState('')
   const [roomName, setRoomName] = useState('')
@@ -63,6 +110,17 @@ export const HomeView = () => {
     } catch (err) {
       setError(cleanError(err))
     }
+  }
+
+  // Mute / unmute a conversation: same setting as Settings › Notifications (no badge, toast or flashing)
+  const toggleMute = (key: string): void => {
+    const list = muted.includes(key) ? muted.filter((k) => k !== key) : [...muted, key]
+    void run(() => window.api.setSettings({ muted: list }))
+  }
+
+  const openMenu = (key: string, name: string, friend?: Friend) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    setMenu({ key, name, friend, spot: { x: e.clientX, y: e.clientY } })
   }
 
   const closeInvite = (): void => {
@@ -120,13 +178,7 @@ export const HomeView = () => {
           onChange={(avatar) => window.api.setAvatar(avatar)}
         />
         <div className="home__identity">
-          <input
-            key={me.name} // re-reads the name when it changes elsewhere (e.g. from the welcome screen)
-            className="home__name"
-            defaultValue={me.name}
-            onBlur={(e) => void window.api.setName(e.target.value)}
-            title={t('home.nameHint')}
-          />
+          <NameEditor name={me.name} />
           <button type="button" className="home__key" onClick={copyCode} title={me.inviteCode}>
             {copied ? t('home.linkCopied') : t('home.copyLink')}
           </button>
@@ -139,10 +191,7 @@ export const HomeView = () => {
           aria-label={t('home.settings')}
           onClick={() => void window.api.openSettings()}
         >
-          {/* Solid, monochrome gear (Material "settings"): takes the text color */}
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.49.49 0 0 0-.48-.41h-3.84a.49.49 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.49.49 0 0 0-.61.22L2.71 8.84a.49.49 0 0 0 .12.64l2.03 1.58c-.04.31-.07.63-.07.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.61.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.26.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.49 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z" />
-          </svg>
+          <Icon name="settings" size={22} />
         </button>
       </section>
 
@@ -240,7 +289,7 @@ export const HomeView = () => {
           <h2 className="list__title">
             {t('home.rooms')}
             <button type="button" className="list__add" onClick={() => toggle('room')} title={t('home.createRoom')}>
-              {adding === 'room' ? '×' : '+'}
+              <Icon name={adding === 'room' ? 'close' : 'plus'} size={18} />
             </button>
           </h2>
           {adding === 'room' && (
@@ -263,6 +312,7 @@ export const HomeView = () => {
               type="button"
               className={`list__item ${openClass(`room:${r.key}`)}`}
               onClick={() => void window.api.toggleRoom(r.key)}
+              onContextMenu={openMenu(r.key, r.name)}
             >
               <Avatar src={r.avatar} name={r.name} seed={r.key} size={32} />
               <span className="list__name">{r.name}</span>
@@ -277,7 +327,7 @@ export const HomeView = () => {
           <h2 className="list__title">
             {t('home.friends')}
             <button type="button" className="list__add" onClick={() => toggle('friend')} title={t('home.addFriend')}>
-              {adding === 'friend' ? '×' : '+'}
+              <Icon name={adding === 'friend' ? 'close' : 'plus'} size={18} />
             </button>
           </h2>
           {/* Adding a friend: only one side pastes the code, the other just has to accept */}
@@ -303,43 +353,70 @@ export const HomeView = () => {
               className={`list__item ${openClass(`chat:${f.key}`)}`}
               disabled={f.status !== 'accepted'}
               onClick={() => void window.api.toggleChat(f.key)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                setMenu({ friend: f, spot: { x: e.clientX, y: e.clientY } })
-              }}
+              onContextMenu={openMenu(f.key, f.name, f)}
             >
               <Avatar src={f.avatar} name={f.name} seed={f.key} size={32} status={f.online ? 'online' : 'offline'} />
               <span className="list__name">{f.name}</span>
               {f.status === 'outgoing' && <em className="list__pending">{t('home.pending')}</em>}
-              {f.call.includes(f.key) && <span title={t('call.incoming', { name: f.name })}>🔊</span>}
+              {/* Friend calling me: animated phone; already in the call together: speaker */}
+              {f.call.includes(f.key) &&
+                (f.call.includes(me.publicKey) ? (
+                  <span className="list__call" title={t('call.inCall')}>
+                    <Icon name="volume" size={16} />
+                  </span>
+                ) : (
+                  <span className="list__call list__call--ringing" title={t('call.incoming', { name: f.name })}>
+                    <Icon name="phone" size={16} />
+                  </span>
+                ))}
               <Badge count={unread[f.key]} />
             </button>
           ))}
         </section>
       </div>
 
-      {/* Right click on a friend (also works on a pending request that I sent: it cancels it) */}
+      {/* Right click on a friend (also works on a pending request that I sent: it cancels it) or on a room */}
       {menu && (
         <ContextMenu spot={menu.spot} onClose={() => setMenu(null)}>
-          <div className="ctx__title">{menu.friend.name}</div>
-          {menu.friend.status === 'accepted' && (
+          <div className="ctx__title">{menu.name}</div>
+          {menu.friend?.status === 'accepted' && (
             <MenuItem
               label={t('menu.openChat')}
               onSelect={() => {
-                void window.api.openChat(menu.friend.key)
+                void window.api.openChat(menu.key)
                 setMenu(null)
               }}
             />
           )}
-          <MenuItem
-            danger
-            label={t('menu.removeFriend')}
-            confirmLabel={t('menu.removeFriendConfirm')}
-            onSelect={() => {
-              void run(() => window.api.removeFriend(menu.friend.key))
-              setMenu(null)
-            }}
-          />
+          {!menu.friend && (
+            <MenuItem
+              label={t('menu.openRoom')}
+              onSelect={() => {
+                void window.api.openRoom(menu.key)
+                setMenu(null)
+              }}
+            />
+          )}
+          {(!menu.friend || menu.friend.status === 'accepted') && (
+            <MenuItem
+              label={muted.includes(menu.key) ? t('menu.unmute') : t('menu.mute')}
+              onSelect={() => {
+                toggleMute(menu.key)
+                setMenu(null)
+              }}
+            />
+          )}
+          {menu.friend && (
+            <MenuItem
+              danger
+              label={t('menu.removeFriend')}
+              confirmLabel={t('menu.removeFriendConfirm')}
+              onSelect={() => {
+                void run(() => window.api.removeFriend(menu.key))
+                setMenu(null)
+              }}
+            />
+          )}
         </ContextMenu>
       )}
     </div>

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { Room } from '../../../shared/types'
 import { useTranslation } from 'react-i18next'
 import { Avatar } from '@/components/Avatar'
+import { Icon } from '@/components/Icon'
 import { cleanError } from '@/utils/errors'
 import { TTL_CHOICES } from '@/components/PrivacySettings'
 
@@ -49,7 +50,7 @@ export const RoomSettings = ({ room, myKey, onClose }: RoomSettingsProps) => {
         <header className="modal__header">
           <h2>{t('roomSettings.title')}</h2>
           <button type="button" className="modal__close" onClick={onClose} title={t('common.close')}>
-            ×
+            <Icon name="close" size={20} />
           </button>
         </header>
 
@@ -104,7 +105,7 @@ export const RoomSettings = ({ room, myKey, onClose }: RoomSettingsProps) => {
                       submitRename(c.id)
                     }}
                   >
-                    <span className="modal__icon">{c.kind === 'text' ? '#' : '🔊'}</span>
+                    <span className="modal__icon">{c.kind === 'text' ? '#' : <Icon name="volume" size={16} />}</span>
                     <input
                       value={renaming[c.id] ?? c.name}
                       maxLength={32}
@@ -136,7 +137,7 @@ export const RoomSettings = ({ room, myKey, onClose }: RoomSettingsProps) => {
               <div key={m.key} className="modal__inline">
                 <Avatar src={m.avatar} name={m.name} seed={m.key} size={28} status={m.online ? 'online' : 'offline'} />
                 <span className="modal__grow">
-                  {m.name} {m.isOwner && '👑'} {m.key === myKey && <em>{t('roomSettings.you')}</em>}
+                  {m.name} {m.isOwner && <Icon name="crown" size={14} className="modal__owner" />} {m.key === myKey && <em>{t('roomSettings.you')}</em>}
                 </span>
                 {room.isOwner && !m.isOwner && (
                   <button

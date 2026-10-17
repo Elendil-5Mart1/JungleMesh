@@ -27,6 +27,7 @@ import {
   MAX_MESSAGE_LENGTH,
   deletedIds,
   findOwnMessage,
+  messagesOf,
   orphanFiles,
   readMessages,
   readRaw,
@@ -98,6 +99,8 @@ export class P2PCore extends EventEmitter {
   private writes = new Map<string, Promise<void>>() // file → last write in progress
   private stealth = false // stealth mode: only friends and members of our rooms can connect
   private floods = new Map<string, { count: number; since: number }>() // per-peer message flood protection
+  private callIds = new Map<string, string>() // friend → call id (a sha256: computed once, read on every state)
+  private stateQueued = false // a 'state' event is already planned for this turn of the event loop
 
   constructor(dataDir: string) {
     super()
@@ -171,7 +174,8 @@ export class P2PCore extends EventEmitter {
       me: () => this.publicKey,
       send: (key, msg) => this.sendControl(key, msg),
       changed: () => this.emitState(),
-      signal: (signal) => this.emit('voice-signal', signal)
+      signal: (signal) => this.emit('voice-signal', signal),
+      declined: (from, room) => this.emit('call-declined', from, room)
     })
     await this.rooms.load(await this.loadJson<SavedRoom[]>('rooms.json', []))
 
@@ -256,6 +260,12 @@ export class P2PCore extends EventEmitter {
 
   roomName(key: string): string | undefined {
     return this.rooms.name(key)
+  }
+
+  // Name of a contact (window titles, notifications), without building the whole state
+  friendName(key: string): string | undefined {
+    const contact = this.contacts.get(key)
+    return contact && contact.status !== 'blocked' ? contact.name : undefined
   }
 
   isRoom(key: string): boolean {
@@ -390,9 +400,14 @@ export class P2PCore extends EventEmitter {
   // A call between two friends reuses the voice machinery with a "virtual room" shared by both:
   // its id is a hash of the two public keys, sorted, so each side computes the same one.
   private callId(friendKey: string): string {
-    return createHash('sha256')
-      .update([this.publicKey, friendKey].sort().join(':'))
-      .digest('hex')
+    let id = this.callIds.get(friendKey)
+    if (!id) {
+      id = createHash('sha256')
+        .update([this.publicKey, friendKey].sort().join(':'))
+        .digest('hex')
+      this.callIds.set(friendKey, id)
+    }
+    return id
   }
 
   // Friend (accepted) behind a call id, if any
@@ -421,6 +436,16 @@ export class P2PCore extends EventEmitter {
 
   voiceSignal(to: string, roomKey: string, channelId: string, data: unknown): void {
     this.voice.signal(to, roomKey, channelId, data)
+  }
+
+  // Refuses the 1-to-1 call of this friend: the caller is told and hangs up,
+  // and a "X declined the call" line goes into the conversation (my log: both of us see it)
+  async declineCall(friendKey: string): Promise<void> {
+    const status = this.contacts.get(friendKey)?.status
+    if (!status || status === 'blocked') return
+    this.voice.decline(this.callId(friendKey))
+    const core = this.myCores.get(friendKey)
+    if (core) await core.append({ type: 'call', id: randomUUID(), event: 'declined', ts: Date.now() } satisfies JournalEntry)
   }
 
   deleteRoom(roomKey: string): Promise<void> {
@@ -576,6 +601,7 @@ export class P2PCore extends EventEmitter {
       // Hyperswarm may replace a connection with a more recent one
       if (this.peers.get(key)?.socket !== socket) return
       this.peers.delete(key)
+      this.floods.delete(key) // the map would otherwise keep one entry per peer ever seen
       this.voice?.onPeerGone(key)
       this.emitState()
     })
@@ -685,17 +711,26 @@ export class P2PCore extends EventEmitter {
   // Emits a 'message' event for each new entry of a DM log
   private watchMessages(core: any, friendKey: string, author: string): void {
     watchJournal(core, async (from) => {
-      for (const msg of await readMessages(core, author, from)) this.emit('message', friendKey, msg)
-      for (const id of deletedIds(await readRaw(core, from), author)) this.deleted(friendKey, id, author)
+      const raws = await readRaw(core, from) // read once, used for the messages AND the deletions
+      for (const msg of messagesOf(raws, author)) this.emit('message', friendKey, msg)
+      for (const id of deletedIds(raws, author)) this.deleted(friendKey, id, author)
     })
   }
 
   //& Utilities
+  // Changes often come in bursts (a connection = socket + Hello + room + voice announcements): they are
+  // grouped into ONE 'state' event per turn of the event loop. The state carries every avatar (~10-100 KB
+  // each) to every window, so sending it five times in a row for one connection was pure waste.
   private emitState(): void {
-    // Room left or removed during a call: no more voice channel
-    const spot = this.voice?.current()
-    if (spot && this.voiceMembers(spot.room).length === 0) this.voice.onRoomGone(spot.room)
-    this.emit('state', this.getState())
+    if (this.stateQueued) return
+    this.stateQueued = true
+    setImmediate(() => {
+      this.stateQueued = false
+      // Room left or removed during a call: no more voice channel
+      const spot = this.voice?.current()
+      if (spot && this.voiceMembers(spot.room).length === 0) this.voice.onRoomGone(spot.room)
+      this.emit('state', this.getState())
+    })
   }
 
   private saveContacts(): Promise<void> {

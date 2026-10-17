@@ -1,0 +1,82 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Incoming call popup (Join / Decline)
+.incoming {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $space * 1.5;
+  height: 100%;
+  padding: $space * 2;
+  background: glass($bg-deep);
+
+  // Avatar with a turquoise halo that pulses, like a ringing phone
+  &__avatar {
+    border-radius: 50%;
+    animation: incoming-pulse 1.25s ease-out infinite;
+  }
+
+  &__text {
+    display: flex;
+    align-items: center;
+    gap: $space * 0.75;
+    margin: 0;
+    font-size: 1.05em;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  // Same shaking phone as in the home list (keyframes in _home.scss)
+  &__phone {
+    display: flex;
+    color: $accent;
+
+    svg {
+      transform-origin: 50% 60%;
+      animation: ring-shake 1.25s ease-in-out infinite;
+    }
+
+    .icon__waves {
+      animation: ring-waves 1.25s steps(1) infinite;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    gap: $space;
+    width: 100%;
+  }
+
+  &__btn {
+    @include chamfer(8px);
+    flex: 1;
+    padding: $space $space * 1.5;
+    border: none;
+    font-weight: 600;
+
+    &--join {
+      background: $accent;
+      color: $on-accent;
+
+      &:hover {
+        background: $accent-bright;
+      }
+    }
+
+    &--decline {
+      background: $danger;
+      color: #fff;
+
+      &:hover {
+        filter: brightness(1.15);
+      }
+    }
+  }
+}
+
+@keyframes incoming-pulse {
+  0% { box-shadow: 0 0 0 0 rgba($accent, 0.6); }
+  100% { box-shadow: 0 0 0 16px rgba($accent, 0); }
+}
