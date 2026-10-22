@@ -47,7 +47,7 @@
     "rehype-highlight": "^7.0.2",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
-    "sass": "^1.105.1",
+    "sass": "^1.105.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "zustand": "^5.0.15"
