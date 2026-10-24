@@ -69,7 +69,7 @@ if (!app.requestSingleInstanceLock()) app.exit(0)
 
 // Windows groups notifications by "AppUserModelId": without it, no toast.
 // In dev we reuse the path of electron.exe (the only id Windows already knows).
-app.setAppUserModelId(app.isPackaged ? 'org.junglemesh.app' : process.execPath)
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'org.junglemesh.app' : process.execPath)
 
 const core = new P2PCore(app.getPath('userData'))
 
@@ -576,9 +576,22 @@ app.whenReady().then(async () => {
   })
   // Windows registers the protocol for the installed app (in dev it would point to the bare electron.exe)
   if (app.isPackaged) app.setAsDefaultProtocolClient(SCHEME)
-  // Launched by a click on a link: the link is in the arguments; otherwise only the home window opens
-  if (!receiveLink(process.argv)) openHome()
+  // Launched by a click on a link: the link is in the arguments (macOS: received by 'open-url' below);
+  // otherwise only the home window opens
+  if (!receiveLink(launchLink ? [launchLink] : process.argv)) openHome()
   startUpdater(() => settings.get().autoUpdate)
+})
+
+// macOS gives a clicked junglemesh:// link through this event, not in the arguments (and possibly before 'ready')
+let launchLink: string | null = null
+app.on('open-url', (e, url) => {
+  e.preventDefault()
+  if (app.isReady()) receiveLink([url])
+  else launchLink = url
+})
+// macOS: a click on the Dock icon when no window is open brings the home window back
+app.on('activate', () => {
+  if (app.isReady() && BrowserWindow.getAllWindows().length === 0) openHome()
 })
 
 // All windows closed: we do NOT quit, the app stays in the notification area.

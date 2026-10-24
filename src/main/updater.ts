@@ -10,6 +10,8 @@ const EVERY_MS = 24 * 60 * 60 * 1000 // the app stays in the tray for days: once
 
 export const startUpdater = (isEnabled: () => boolean): void => {
   if (!app.isPackaged) return // in dev there is nothing to update
+  // macOS only installs updates of an app signed by an Apple developer account: ours is not (test builds)
+  if (process.platform === 'darwin') return
 
   autoUpdater.autoDownload = false // ask first
   autoUpdater.autoInstallOnAppQuit = false // and install only when the user agrees

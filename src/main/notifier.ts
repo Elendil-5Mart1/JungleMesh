@@ -56,7 +56,10 @@ export const createNotifier = (deps: NotifierDeps) => {
   const applyOverlay = (): void => {
     const n = total()
     dot ??= unreadDot()
-    for (const win of allWindows()) win.setOverlayIcon(n > 0 ? dot : null, n > 0 ? t('tray.unread', { count: n }) : '')
+    // (the overlay icon is a Windows taskbar feature)
+    if (process.platform === 'win32') {
+      for (const win of allWindows()) win.setOverlayIcon(n > 0 ? dot : null, n > 0 ? t('tray.unread', { count: n }) : '')
+    }
     stopFlash()
   }
 

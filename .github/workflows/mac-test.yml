@@ -1,0 +1,30 @@
+name: Mac test build
+
+# Builds the macOS app (.dmg, Apple Silicon and Intel) for testers, on demand: Actions › Mac test build › Run workflow.
+# No tag, no release: the .dmg files are attached to the run (Artifacts, at the bottom of its page).
+# Not signed by an Apple developer account (ad-hoc signature only): see manual.md for how a tester opens it.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    runs-on: macos-15
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false # never look for a signing certificate in the runner's keychain
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run dist:mac
+      - uses: actions/upload-artifact@v7
+        with:
+          name: JungleMesh-mac
+          path: dist/*.dmg
+          retention-days: 14
