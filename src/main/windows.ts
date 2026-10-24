@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, screen, shell, type Rectangle } from 'elect
 import { join } from 'node:path'
 import { getSavedState, loadSession, saveSession, saveState } from './windowState'
 import { setRoundCorners } from './dwm'
+import { attachTextMenu } from './textMenu'
 import type { WindowMaterial } from '../shared/types'
 
 // logical id ('home', 'chat:<key>') → open window
@@ -183,6 +184,7 @@ export const openWindow = ({
   })
 
   if (material !== 'none') applyMaterial(win)
+  attachTextMenu(win)
   win.once('ready-to-show', () => (popup ? win.showInactive() : win.show()))
 
   win.webContents.on('did-finish-load', () => win.webContents.setZoomLevel(currentZoom()))
@@ -203,7 +205,10 @@ export const openWindow = ({
   })
   // And we forbid any navigation of the window itself away from the app (including redirects)
   win.webContents.on('will-navigate', (e) => e.preventDefault())
-  win.webContents.on('will-redirect', (e) => e.preventDefault())
+  // (main frame only: the embedded players follow their own redirects, the CSP still limits where they go)
+  win.webContents.on('will-redirect', (e) => {
+    if (e.isMainFrame) e.preventDefault()
+  })
   win.webContents.on('will-attach-webview', (e) => e.preventDefault())
 
   // In dev: Vite server (hot reload). In prod: built file.

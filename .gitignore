@@ -12,3 +12,8 @@ logs.md
 manual.md
 todo.md
 bugreport.md
+scripts/read-room.cjs
+scripts/e2e.mjs
+scripts/e2e-room.mjs
+scripts/e2e-call.mjs
+scripts/e2e-block.mjs

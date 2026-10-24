@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import b4a from 'b4a'
 import { t } from '../../shared/i18n'
 import {
+  AUDIO_MIMES,
   IMAGE_MIMES,
   MAX_FILE_SIZE,
   MAX_IMAGE_PIXELS,
@@ -25,6 +26,15 @@ const sniffMime = (bytes: Buffer): string | null => {
   if (bytes.length > 6 && bytes.toString('latin1', 0, 3) === 'GIF') return 'image/gif'
   if (bytes.length > 12 && bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WEBP')
     return 'image/webp'
+  // Audio: tags / headers of the usual formats
+  if (bytes.length > 12 && bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WAVE')
+    return 'audio/wav'
+  if (bytes.length > 4 && bytes.toString('latin1', 0, 4) === 'OggS') return 'audio/ogg'
+  if (bytes.length > 4 && bytes.toString('latin1', 0, 4) === 'fLaC') return 'audio/flac'
+  if (bytes.length > 12 && bytes.toString('latin1', 4, 8) === 'ftyp' && bytes.toString('latin1', 8, 11) === 'M4A') return 'audio/mp4'
+  // MP3: ID3 tag, or directly an MPEG frame (11 bits of sync at 1; never confused with JPEG's FF D8)
+  if (bytes.length > 3 && (bytes.toString('latin1', 0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)))
+    return 'audio/mpeg'
   return null
 }
 
@@ -92,6 +102,24 @@ export class FileManager {
     }
     if (total !== info.size) throw new Error(t('err.fileCorrupt'))
     return Buffer.concat(parts)
+  }
+
+  // A RECEIVED file whose bytes now live elsewhere (saved by the user, or read by the player): its blocks are
+  // freed. Never my own file: its log is the original, the others still download it from me.
+  async releaseCopy(coreKey: string): Promise<void> {
+    const core = this.store.get({ key: b4a.from(coreKey, 'hex'), valueEncoding: 'binary' })
+    await core.ready()
+    if (!core.writable) await this.release(coreKey)
+  }
+
+  // Audio for the chat player: only if the real bytes are audio (the declared type is never trusted)
+  async audioBytes(coreKey: string): Promise<{ mime: string; bytes: Buffer }> {
+    const info = knownFiles.get(coreKey)
+    if (!info || !AUDIO_MIMES.includes(info.mime)) throw new Error(t('err.fileNotAudio'))
+    const bytes = await this.read(coreKey)
+    const mime = sniffMime(bytes)
+    if (!mime || !AUDIO_MIMES.includes(mime)) throw new Error(t('err.fileNotAudio'))
+    return { mime, bytes }
   }
 
   // Frees the disk space used by a file's blocks (after a download the user's own copy is the one that counts,

@@ -1,9 +1,13 @@
-//* "Privacy" tab: stealth mode and IP protection in voice
+//* "Privacy" tab: stealth mode, blocked people and IP protection in voice
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AppSettings } from '../../../shared/types'
 import { BackupPanel } from './BackupPanel'
 import { Toggle } from '@/components/Toggle'
+import { Avatar } from '@/components/Avatar'
+import { useCoreStore } from '@/stores/useCoreStore'
+
+const EMPTY: never[] = []
 
 // Choices offered for the lifetime of shared images (hours; 0 = never)
 export const TTL_CHOICES = [1, 24, 72, 168, 720, 0]
@@ -15,6 +19,7 @@ interface Props {
 
 export const PrivacySettings = ({ settings, onChange }: Props) => {
   const { t } = useTranslation()
+  const blocked = useCoreStore((s) => s.blocked) ?? EMPTY
   // The relay fields are validated on the main side: we type locally, we save when leaving the field
   const [turn, setTurn] = useState({ url: settings.turnUrl, user: settings.turnUser, pass: settings.turnPass })
   useEffect(() => setTurn({ url: settings.turnUrl, user: settings.turnUser, pass: settings.turnPass }), [settings.turnUrl, settings.turnUser, settings.turnPass])
@@ -35,6 +40,22 @@ export const PrivacySettings = ({ settings, onChange }: Props) => {
         hint={t('privacy.stealthHint')}
       />
 
+      {/* People I removed or whose request I declined: refused at connection until unblocked */}
+      <h3>{t('privacy.blocked')}</h3>
+      {blocked.length === 0 && <p className="settings__hint">{t('privacy.noBlocked')}</p>}
+      {blocked.map((b) => (
+        <div key={b.key} className="settings__person">
+          <Avatar src={b.avatar} name={b.name} size={28} />
+          <span className="settings__person-name">
+            {b.name} <small>{b.key.slice(0, 8)}</small>
+          </span>
+          <button type="button" className="settings__button" onClick={() => void window.api.unblock(b.key)}>
+            {t('privacy.unblock')}
+          </button>
+        </div>
+      ))}
+      {blocked.length > 0 && <p className="settings__hint">{t('privacy.unblockHint')}</p>}
+
       <h3>{t('privacy.images')}</h3>
       <label className="settings__field">
         {t('privacy.imageTtl')}
@@ -50,6 +71,14 @@ export const PrivacySettings = ({ settings, onChange }: Props) => {
         </select>
       </label>
       <p className="settings__hint">{t('privacy.imageTtlHint')}</p>
+
+      <h3>{t('privacy.embeds')}</h3>
+      <Toggle
+        checked={settings.autoEmbeds}
+        onChange={(autoEmbeds) => onChange({ autoEmbeds })}
+        label={t('privacy.autoEmbeds')}
+        hint={t('privacy.autoEmbedsHint')}
+      />
 
       <h3>{t('privacy.appearance')}</h3>
       <Toggle

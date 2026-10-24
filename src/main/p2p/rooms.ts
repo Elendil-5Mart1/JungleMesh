@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto'
 import b4a from 'b4a'
 import type { Avatar, Channel, ChannelKind, ChatMessage, Room, RoomStatus } from '../../shared/types'
 import { t } from '../../shared/i18n'
+import { annotateAll, type Annotation } from '../../shared/annotations'
 import {
   cleanAvatar,
   cleanChannelId,
@@ -27,6 +28,7 @@ import {
   deletedIds,
   findOwnMessage,
   messagesOf,
+  annotationsOf,
   withoutDeleted,
   type JournalEntry,
   type SharedFile
@@ -88,6 +90,7 @@ export interface RoomHost {
   changed: () => void
   message: (roomKey: string, msg: ChatMessage) => void
   messageDeleted: (roomKey: string, id: string, author: string) => void
+  messageAnnotated: (roomKey: string, annotation: Annotation) => void
 }
 
 const HEX_KEY = /^[0-9a-f]{64}$/
@@ -327,11 +330,16 @@ export class RoomManager {
     if (!rt?.active) return []
     const ownerRaws = await readRaw(rt.ownerCore)
     const messages = withoutDeleted(ownerRaws, this.ownerEntriesToMessages(rt, ownerRaws, 0), rt.saved.owner)
+    const annotations = annotationsOf(ownerRaws, rt.saved.owner) // edits and reactions, applied at the end
     // Removed members keep their (still watched) log in rt.cores: their messages are no longer shown
     const others: [string, any][] = [...rt.cores].filter(([author]) => rt.members.has(author))
     if (rt.myCore && rt.myCore !== rt.ownerCore) others.push([this.host.me().key, rt.myCore])
-    for (const [author, core] of others) messages.push(...messagesOf(await readRaw(core), author))
-    return messages.sort((a, b) => a.ts - b.ts)
+    for (const [author, core] of others) {
+      const raws = await readRaw(core)
+      messages.push(...messagesOf(raws, author))
+      annotations.push(...annotationsOf(raws, author))
+    }
+    return annotateAll(messages.sort((a, b) => a.ts - b.ts), annotations)
   }
 
   async send(roomKey: string, text: string, channel = GENERAL.id, file?: SharedFile): Promise<void> {
@@ -358,6 +366,21 @@ export class RoomManager {
     const own = await findOwnMessage(rt.myCore, id)
     if (!own) return
     await rt.myCore.append({ type: 'delete', id, ...(own.file && { file: own.file }), ts: Date.now() } satisfies JournalEntry)
+  }
+
+  // Edit one of MY messages / react to a message (an entry in my own log, see shared/annotations.ts)
+  async editMessage(roomKey: string, id: string, text: string): Promise<void> {
+    const rt = this.rooms.get(roomKey)
+    if (!rt?.myCore || rt.saved.status !== 'joined') throw new Error(t('err.notEnrolledYet'))
+    const own = await findOwnMessage(rt.myCore, id)
+    if (!own || (!text.trim() && !own.file)) return
+    await rt.myCore.append({ type: 'edit', id, text: text.slice(0, MAX_MESSAGE_LENGTH), ts: Date.now() } satisfies JournalEntry)
+  }
+
+  async react(roomKey: string, id: string, to: string, emoji: string, on: boolean): Promise<void> {
+    const rt = this.rooms.get(roomKey)
+    if (!rt?.myCore || rt.saved.status !== 'joined') throw new Error(t('err.notEnrolledYet'))
+    await rt.myCore.append({ type: 'react', id, to, emoji, on, ts: Date.now() } satisfies JournalEntry)
   }
 
   //& Control messages received from a friend
@@ -469,6 +492,7 @@ export class RoomManager {
       await this.applyRegistry(rt, raws)
       for (const msg of withoutDeleted(raws, this.ownerEntriesToMessages(rt, raws, from), rt.saved.owner)) this.post(rt, msg)
       for (const id of deletedIds(raws, rt.saved.owner)) this.postDeleted(rt, id, rt.saved.owner)
+      for (const a of annotationsOf(raws, rt.saved.owner)) this.postAnnotated(rt, a)
     })
 
     // The topic = the registry's discoveryKey: only those who know the room can find it
@@ -668,6 +692,14 @@ export class RoomManager {
     const raws = await readRaw(core, from)
     for (const msg of messagesOf(raws, author)) this.post(rt, msg)
     for (const id of deletedIds(raws, author)) this.postDeleted(rt, id, author)
+    for (const a of annotationsOf(raws, author)) this.postAnnotated(rt, a)
+  }
+
+  // An edit or a reaction: forwarded to the windows with the same guards as post (its author = a.by)
+  private postAnnotated(rt: RoomRuntime, a: Annotation): void {
+    if (this.rooms.get(rt.saved.key) !== rt || rt.saved.leaving) return
+    if (a.by !== rt.saved.owner && !rt.members.has(a.by) && a.by !== this.host.me().key) return
+    this.host.messageAnnotated(rt.saved.key, a)
   }
 
   // A member deleted one of their messages: the windows hide it (same guards as post)

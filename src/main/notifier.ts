@@ -57,6 +57,14 @@ export const createNotifier = (deps: NotifierDeps) => {
     const n = total()
     dot ??= unreadDot()
     for (const win of allWindows()) win.setOverlayIcon(n > 0 ? dot : null, n > 0 ? t('tray.unread', { count: n }) : '')
+    stopFlash()
+  }
+
+  // Windows keeps a flashing button lit until THAT window gets the focus. Messages read in their
+  // own window (or a call answered) must switch the home window off too, without a detour through it.
+  const stopFlash = (): void => {
+    if (total() > 0 || ringing.size > 0) return
+    getWindow('home')?.flashFrame(false)
   }
 
   // A friend coming back online delivers all their waiting messages in one go: the counters change
@@ -123,6 +131,7 @@ export const createNotifier = (deps: NotifierDeps) => {
     for (const key of ringing) if (!now.has(key)) deps.closeIncoming(key) // answered, refused or hung up
     ringing.clear()
     for (const key of now) ringing.add(key)
+    stopFlash()
     const ring = ringing.size > 0 && deps.settings().ringtone
     if (ring && !ringWindow) {
       ringWindow = getWindow('home') ?? allWindows()[0] ?? null

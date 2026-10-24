@@ -20,7 +20,7 @@ import Protomux from 'protomux'
 import c from 'compact-encoding'
 import idEnc from 'hypercore-id-encoding'
 import b4a from 'b4a'
-import type { Avatar, ChannelKind, ChatMessage, CoreState, Friend, FriendStatus } from '../../shared/types'
+import type { Avatar, ChannelKind, ChatMessage, BlockedContact, CoreState, Friend, FriendStatus } from '../../shared/types'
 import {
   cleanAvatar,
   cleanFileName,
@@ -29,7 +29,7 @@ import {
   findOwnMessage,
   messagesOf,
   orphanFiles,
-  readMessages,
+  annotationsOf,
   readRaw,
   watchJournal,
   type JournalEntry,
@@ -38,6 +38,7 @@ import {
 import { FileManager } from './files'
 import { RoomManager, type RoomControl, type SavedRoom } from './rooms'
 import { t } from '../../shared/i18n'
+import { annotateAll, isEmoji, type Annotation } from '../../shared/annotations'
 import { VoiceManager, type VoiceControl } from './voice'
 
 //& Internal types
@@ -165,9 +166,13 @@ export class P2PCore extends EventEmitter {
       isOnline: (key) => this.peers.has(key),
       sendControl: (key, msg) => this.sendControl(key, msg),
       save: (rooms) => this.saveJson('rooms.json', rooms),
-      changed: () => this.emitState(),
+      changed: () => {
+        this.liftBans() // a stranger refused by stealth mode may have just become a member
+        this.emitState()
+      },
       message: (roomKey, msg) => this.emit('message', roomKey, msg),
-      messageDeleted: (roomKey, id, author) => this.deleted(roomKey, id, author)
+      messageDeleted: (roomKey, id, author) => this.deleted(roomKey, id, author),
+      messageAnnotated: (roomKey, a) => this.emit('message-annotated', roomKey, a)
     })
     this.voice = new VoiceManager({
       members: (room) => this.voiceMembers(room),
@@ -200,7 +205,7 @@ export class P2PCore extends EventEmitter {
   setStealth(on: boolean): void {
     if (on === this.stealth) return
     this.stealth = on
-    if (!on) return
+    if (!on) return this.liftBans() // the strangers refused until now are welcome again
     for (const [key, peer] of this.peers) if (this.refuses(key)) peer.socket.destroy()
   }
 
@@ -231,8 +236,12 @@ export class P2PCore extends EventEmitter {
   //& State sent to the windows
   getState(): CoreState {
     const friends: Friend[] = []
+    const blocked: BlockedContact[] = []
     for (const contact of this.contacts.values()) {
-      if (contact.status === 'blocked') continue
+      if (contact.status === 'blocked') {
+        blocked.push({ key: contact.key, name: contact.name, avatar: this.avatars.get(contact.key) ?? null })
+        continue
+      }
       const callId = this.callId(contact.key)
       friends.push({
         key: contact.key,
@@ -254,6 +263,7 @@ export class P2PCore extends EventEmitter {
         avatar: this.avatar
       },
       friends,
+      blocked,
       rooms: this.rooms.getState().map((r) => ({ ...r, voice: this.voice?.participants(r.key) ?? {} }))
     }
   }
@@ -319,6 +329,7 @@ export class P2PCore extends EventEmitter {
     })
     await this.openMyCore(key)
     await this.saveContacts()
+    this.unban(key) // blocked before, or refused by stealth mode while still a stranger
     this.swarm.joinPeer(b4a.from(key, 'hex'))
     if (this.peers.has(key)) await this.sendHello(key)
     this.emitState()
@@ -365,6 +376,31 @@ export class P2PCore extends EventEmitter {
     }
     await this.saveContacts()
     this.emitState()
+  }
+
+  // Unblock (Settings › Privacy › Blocked): the contact is forgotten, they become a stranger again. They can send
+  // a new friend request, or I add them back with their code (the history comes back: the logs stayed on disk).
+  async unblock(key: string): Promise<void> {
+    if (this.contacts.get(key)?.status !== 'blocked') return
+    this.contacts.delete(key)
+    this.unban(key)
+    await this.saveContacts()
+    this.emitState()
+  }
+
+  // Hyperswarm marks a peer refused by our firewall as "banned", and keeps that mark until the app restarts
+  // (banned peers are never garbage-collected). Once we accept them again, the mark must go, otherwise they
+  // cannot connect before a restart (bug seen on 2026-10-17: a friend added back stayed offline).
+  private unban(key: string): void {
+    const info = this.swarm.peers.get(key)
+    if (!info) return
+    info.ban(false)
+    info.attempts = 0 // explicit peers are no longer tried after 5 failed attempts
+  }
+
+  // Every peer banned by the firewall that it would now accept (stealth turned off, new room member)
+  private liftBans(): void {
+    for (const [key, info] of this.swarm?.peers ?? []) if (info.banned && !this.refuses(key)) this.unban(key)
   }
 
   //& Rooms (delegated to the RoomManager)
@@ -472,11 +508,18 @@ export class P2PCore extends EventEmitter {
   async getHistory(convId: string): Promise<ChatMessage[]> {
     if (this.rooms.has(convId)) return this.rooms.getHistory(convId)
     const messages: ChatMessage[] = []
-    const mine = this.myCores.get(convId)
-    const theirs = this.remoteCores.get(convId)
-    if (mine) messages.push(...(await readMessages(mine, this.publicKey)))
-    if (theirs) messages.push(...(await readMessages(theirs, convId)))
-    return messages.sort((a, b) => a.ts - b.ts)
+    const annotations: Annotation[] = [] // edits and reactions, applied once both logs are read
+    const logs: [any, string][] = [
+      [this.myCores.get(convId), this.publicKey],
+      [this.remoteCores.get(convId), convId]
+    ]
+    for (const [core, author] of logs) {
+      if (!core) continue
+      const raws = await readRaw(core)
+      messages.push(...messagesOf(raws, author))
+      annotations.push(...annotationsOf(raws, author))
+    }
+    return annotateAll(messages.sort((a, b) => a.ts - b.ts), annotations)
   }
 
   async send(convId: string, text: string, channel?: string, file?: SharedFile): Promise<void> {
@@ -500,6 +543,24 @@ export class P2PCore extends EventEmitter {
     const own = await findOwnMessage(core, id)
     if (!own) return
     await core.append({ type: 'delete', id, ...(own.file && { file: own.file }), ts: Date.now() } satisfies JournalEntry)
+  }
+
+  //& Editing my own messages and reacting to any message (an entry in my log, see shared/annotations.ts)
+  async editMessage(convId: string, id: string, text: string): Promise<void> {
+    if (this.rooms.has(convId)) return this.rooms.editMessage(convId, id, text)
+    const core = this.myCores.get(convId)
+    if (!core || this.contacts.get(convId)?.status !== 'accepted') throw new Error(t('err.notAcceptedYet'))
+    const own = await findOwnMessage(core, id)
+    if (!own || (!text.trim() && !own.file)) return // not mine, or emptied (deleting is done with the trash button)
+    await core.append({ type: 'edit', id, text: text.slice(0, MAX_MESSAGE_LENGTH), ts: Date.now() } satisfies JournalEntry)
+  }
+
+  async react(convId: string, id: string, to: string, emoji: string, on: boolean): Promise<void> {
+    if (!isEmoji(emoji)) return
+    if (this.rooms.has(convId)) return this.rooms.react(convId, id, to, emoji, on)
+    const core = this.myCores.get(convId)
+    if (!core || this.contacts.get(convId)?.status !== 'accepted') throw new Error(t('err.notAcceptedYet'))
+    await core.append({ type: 'react', id, to, emoji, on, ts: Date.now() } satisfies JournalEntry)
   }
 
   // A message was deleted by its author: the windows hide it, and its image (if any) is freed from the disk
@@ -529,9 +590,14 @@ export class P2PCore extends EventEmitter {
     return this.files.imageDataUrl(coreKey)
   }
 
-  // After a download to the user's disk: the copy kept in the app's own storage is freed
+  audioBytes(coreKey: string): Promise<{ mime: string; bytes: Buffer }> {
+    return this.files.audioBytes(coreKey)
+  }
+
+  // After a download to the user's disk (or a read by the player): the copy kept in the app's own storage
+  // is freed, unless it is my own file (see files.ts)
   releaseFile(coreKey: string): Promise<void> {
-    return this.files.release(coreKey)
+    return this.files.releaseCopy(coreKey)
   }
 
   //& Image lifetime: a shared image disappears after a delay (0 = never).
@@ -714,6 +780,7 @@ export class P2PCore extends EventEmitter {
       const raws = await readRaw(core, from) // read once, used for the messages AND the deletions
       for (const msg of messagesOf(raws, author)) this.emit('message', friendKey, msg)
       for (const id of deletedIds(raws, author)) this.deleted(friendKey, id, author)
+      for (const a of annotationsOf(raws, author)) this.emit('message-annotated', friendKey, a)
     })
   }
 

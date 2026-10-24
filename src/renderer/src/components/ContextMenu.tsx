@@ -11,20 +11,29 @@ interface ContextMenuProps {
   spot: MenuSpot
   onClose: () => void
   children: ReactNode
+  className?: string // variant (e.g. 'ctx--bare' around the emoji picker)
 }
 
-export const ContextMenu = ({ spot, onClose, children }: ContextMenuProps) => {
+export const ContextMenu = ({ spot, onClose, children, className }: ContextMenuProps) => {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState(spot)
 
-  // Keeps the menu inside the window (it opens at the cursor, but never sticks out)
+  // Keeps the menu inside the window (it opens at the cursor, but never sticks out).
+  // Measured again when its size changes: a content loaded later (emoji picker) makes it grow.
   useLayoutEffect(() => {
-    const box = ref.current?.getBoundingClientRect()
-    if (!box) return
-    setPos({
-      x: Math.max(4, Math.min(spot.x, window.innerWidth - box.width - 4)),
-      y: Math.max(4, Math.min(spot.y, window.innerHeight - box.height - 4))
-    })
+    const el = ref.current
+    if (!el) return
+    const place = (): void => {
+      const box = el.getBoundingClientRect()
+      setPos({
+        x: Math.max(4, Math.min(spot.x, window.innerWidth - box.width - 4)),
+        y: Math.max(4, Math.min(spot.y, window.innerHeight - box.height - 4))
+      })
+    }
+    place()
+    const observer = new ResizeObserver(place)
+    observer.observe(el)
+    return () => observer.disconnect()
   }, [spot])
 
   useEffect(() => {
@@ -46,7 +55,7 @@ export const ContextMenu = ({ spot, onClose, children }: ContextMenuProps) => {
   }, [onClose])
 
   return createPortal(
-    <div ref={ref} className="ctx" style={{ left: pos.x, top: pos.y }} onContextMenu={(e) => e.preventDefault()}>
+    <div ref={ref} className={`ctx ${className ?? ''}`} style={{ left: pos.x, top: pos.y }} onContextMenu={(e) => e.preventDefault()}>
       {children}
     </div>,
     document.body

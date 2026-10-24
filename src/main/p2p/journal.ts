@@ -1,5 +1,6 @@
 //* Common tools for Hypercore logs (private messages AND rooms)
 import type { Avatar, CallEvent, ChannelKind, ChatMessage } from '../../shared/types'
+import { isEmoji, type Annotation } from '../../shared/annotations'
 
 const CALL_EVENTS: CallEvent[] = ['declined']
 
@@ -26,6 +27,8 @@ export type JournalEntry =
   | { type: 'join'; key: string; core: string; name: string; ts: number }
   | { type: 'leave'; ts: number }
   | { type: 'delete'; id: string; file?: string; ts: number } // the author deletes one of THEIR messages (tombstone)
+  | { type: 'edit'; id: string; text: string; ts: number } // the author edits one of THEIR messages
+  | { type: 'react'; id: string; to: string; emoji: string; on: boolean; ts: number } // reaction to the message `id` of `to`
 
 //& Shared file: the bytes live in a SEPARATE Hypercore (one block = 64 KB), the message only points to it
 export interface SharedFile {
@@ -36,6 +39,8 @@ export interface SharedFile {
 }
 
 export const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+// Audio played in the chat (samples, demos…). Older versions see them as ordinary files.
+export const AUDIO_MIMES = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/flac', 'audio/mp4']
 
 // File name: no path, no control or odd characters, never empty
 export const cleanFileName = (raw: unknown): string => {
@@ -59,7 +64,8 @@ export const cleanFile = (raw: unknown): SharedFile | undefined => {
   const f = raw as Partial<SharedFile> | null
   if (!f || typeof f.core !== 'string' || !/^[0-9a-f]{64}$/.test(f.core)) return undefined
   if (!Number.isInteger(f.size) || (f.size as number) < 1 || (f.size as number) > MAX_FILE_SIZE) return undefined
-  const mime = typeof f.mime === 'string' && IMAGE_MIMES.includes(f.mime) ? f.mime : 'application/octet-stream'
+  const known = typeof f.mime === 'string' && (IMAGE_MIMES.includes(f.mime) || AUDIO_MIMES.includes(f.mime))
+  const mime = known ? (f.mime as string) : 'application/octet-stream'
   return { core: f.core, name: cleanFileName(f.name), size: f.size as number, mime }
 }
 
@@ -171,7 +177,7 @@ export const toMessage = (raw: unknown, author: string): ChatMessage | null => {
     id: entry.id.slice(0, 64),
     from: author, // the author = the log's owner (signed), never a field of the message
     text: entry.text.slice(0, MAX_MESSAGE_LENGTH),
-    ...(file && { file: { ...file, image: file.mime !== 'application/octet-stream' } }),
+    ...(file && { file: { ...file, image: IMAGE_MIMES.includes(file.mime) } }),
     ts: Number.isFinite(entry.ts) ? (entry.ts as number) : 0,
     channel: cleanChannelId(entry.channel) // undefined = 'general' (or DM)
   }
@@ -215,6 +221,23 @@ export const findOwnMessage = async (core: any, id: string): Promise<{ file?: st
   return null
 }
 
+//& Edits and reactions written by `author` (rules in shared/annotations.ts). Ignored by older versions,
+// which skip the unknown types: they simply show the original text, without reactions.
+export const annotationsOf = (raws: unknown[], author: string): Annotation[] => {
+  const out: Annotation[] = []
+  for (const raw of raws) {
+    const e = raw as Partial<{ type: string; id: unknown; text: unknown; to: unknown; emoji: unknown; on: unknown; ts: unknown }> | null
+    if (typeof e?.id !== 'string' || typeof e.ts !== 'number' || !Number.isFinite(e.ts)) continue
+    const id = e.id.slice(0, 64)
+    if (e.type === 'edit' && typeof e.text === 'string') {
+      out.push({ kind: 'edit', id, by: author, text: e.text.slice(0, MAX_MESSAGE_LENGTH), ts: e.ts })
+    } else if (e.type === 'react' && typeof e.to === 'string' && /^[0-9a-f]{64}$/.test(e.to) && isEmoji(e.emoji) && typeof e.on === 'boolean') {
+      out.push({ kind: 'react', id, to: e.to, by: author, emoji: e.emoji, on: e.on, ts: e.ts })
+    }
+  }
+  return out
+}
+
 // Displayable messages of raw entries written by `author`, minus the ones they deleted in the same entries
 export const messagesOf = (raws: unknown[], author: string): ChatMessage[] => {
   const messages: ChatMessage[] = []
@@ -225,5 +248,3 @@ export const messagesOf = (raws: unknown[], author: string): ChatMessage[] => {
   return withoutDeleted(raws, messages, author)
 }
 
-export const readMessages = async (core: any, author: string, from = 0): Promise<ChatMessage[]> =>
-  messagesOf(await readRaw(core, from), author)

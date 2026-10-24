@@ -15,6 +15,15 @@
   border-radius: $radius;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 
+  // Around a whole component (emoji picker): no padding nor width limit, the component draws itself
+  &--bare {
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    background: none;
+    border: none;
+  }
+
   &__title {
     padding: $space * 0.5 $space;
     color: $text-muted;

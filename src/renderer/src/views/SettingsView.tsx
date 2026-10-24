@@ -11,7 +11,6 @@ import { cleanError } from '@/utils/errors'
 import { forgetCustomSound, playNotifSound, startRing } from '@/utils/notifSound'
 import type { SoundKind, WindowMaterial } from '../../../shared/types'
 
-const EMPTY: never[] = []
 const RING_TEST_MS = 3000 // the ringtone test stops by itself
 // Blur behind the windows: a Windows 11 feature (nothing on Linux)
 const IS_WINDOWS = navigator.userAgent.includes('Windows')
@@ -63,8 +62,6 @@ const TABS: Tab[] = ['profile', 'notifications', 'app', 'audio', 'privacy'] // l
 export const SettingsView = () => {
   const { t } = useTranslation()
   const me = useCoreStore((s) => s.me)
-  const friends = useCoreStore((s) => s.friends) ?? EMPTY
-  const rooms = useCoreStore((s) => s.rooms) ?? EMPTY
   const settings = useCoreStore((s) => s.settings)
 
   const [tab, setTab] = useState<Tab>('profile')
@@ -81,19 +78,11 @@ export const SettingsView = () => {
     void window.api.setSettings(patch).catch((err) => setError(cleanError(err)))
   }
 
-  // A conversation (friend or room) is muted or unmuted
-  const setMuted = (key: string, muted: boolean): void => {
-    set({ muted: muted ? [...settings.muted, key] : settings.muted.filter((k) => k !== key) })
-  }
-
   const copyCode = async (): Promise<void> => {
     await navigator.clipboard.writeText(me.inviteCode)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
-
-  const contacts = friends.filter((f) => f.status === 'accepted')
-  const myRooms = rooms.filter((r) => r.status !== 'invited')
 
   return (
     <div className="settings">
@@ -199,30 +188,6 @@ export const SettingsView = () => {
               hint={t('settings.ringtoneHint')}
             />
             {settings.ringtone && <SoundChooser kind="ring" file={settings.ringtoneFile} onError={setError} />}
-
-            <h3>{t('settings.mute')}</h3>
-            <p className="settings__hint">
-              {t('settings.muteHint')}
-            </p>
-            {myRooms.length + contacts.length === 0 && (
-              <p className="settings__hint">{t('settings.noConversations')}</p>
-            )}
-            {myRooms.map((r) => (
-              <Toggle
-                key={r.key}
-                checked={settings.muted.includes(r.key)}
-                onChange={(muted) => setMuted(r.key, muted)}
-                label={`# ${r.name}`}
-              />
-            ))}
-            {contacts.map((f) => (
-              <Toggle
-                key={f.key}
-                checked={settings.muted.includes(f.key)}
-                onChange={(muted) => setMuted(f.key, muted)}
-                label={f.name}
-              />
-            ))}
           </section>
         )}
 

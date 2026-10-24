@@ -1,4 +1,5 @@
-//* "Room settings" modal: the creator manages name, channels and members; everyone can leave
+//* "Room settings" modal: the creator manages name, image lifetime and members; everyone can leave
+// (channels are renamed / deleted by right click in the room's navigation)
 import { useState } from 'react'
 import type { Room } from '../../../shared/types'
 import { useTranslation } from 'react-i18next'
@@ -19,8 +20,6 @@ export const RoomSettings = ({ room, myKey, onClose }: RoomSettingsProps) => {
   const [error, setError] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  // Channel being renamed: id → new name typed
-  const [renaming, setRenaming] = useState<Record<string, string>>({})
 
   // Runs an action and displays the error, if any
   const run = async (action: () => Promise<unknown>): Promise<void> => {
@@ -31,18 +30,6 @@ export const RoomSettings = ({ room, myKey, onClose }: RoomSettingsProps) => {
       setError(cleanError(err))
     }
   }
-
-  const submitRename = (id: string): void => {
-    const next = renaming[id]
-    if (next === undefined) return
-    void run(async () => {
-      await window.api.renameChannel(room.key, id, next)
-      setRenaming(({ [id]: _done, ...rest }) => rest)
-    })
-  }
-
-  // 'general' is the default channel: it can be neither renamed nor deleted
-  const editable = room.channels.filter((c) => c.id !== 'general')
 
   return (
     <div className="modal" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -91,42 +78,6 @@ export const RoomSettings = ({ room, myKey, onClose }: RoomSettingsProps) => {
                   ))}
                 </select>
                 <p className="modal__hint">{t('roomSettings.imageTtlHint')}</p>
-              </section>
-
-              <section className="modal__section">
-                <h3>{t('roomSettings.channels')}</h3>
-                {editable.length === 0 && <p className="modal__hint">{t('roomSettings.noChannels')}</p>}
-                {editable.map((c) => (
-                  <form
-                    key={c.id}
-                    className="modal__inline"
-                    onSubmit={(e) => {
-                      e.preventDefault()
-                      submitRename(c.id)
-                    }}
-                  >
-                    <span className="modal__icon">{c.kind === 'text' ? '#' : <Icon name="volume" size={16} />}</span>
-                    <input
-                      value={renaming[c.id] ?? c.name}
-                      maxLength={32}
-                      onChange={(e) => setRenaming({ ...renaming, [c.id]: e.target.value })}
-                    />
-                    <button type="submit" disabled={renaming[c.id] === undefined || renaming[c.id] === c.name}>
-                      {t('roomSettings.rename')}
-                    </button>
-                    <button
-                      type="button"
-                      className="modal__danger"
-                      title={t('roomSettings.deleteChannel')}
-                      onClick={() => void run(() => window.api.deleteChannel(room.key, c.id))}
-                    >
-                      {t('roomSettings.delete')}
-                    </button>
-                  </form>
-                ))}
-                <p className="modal__hint">
-                  {t('roomSettings.deleteHint')}
-                </p>
               </section>
             </>
           )}

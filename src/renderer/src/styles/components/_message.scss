@@ -1,4 +1,5 @@
 @use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
 
 //* A message in the conversation: avatar on the left, name + time, then the text
 .message {
@@ -64,21 +65,120 @@
     color: $accent;
   }
 
-  // Trash button on my own messages, only visible while hovering the message
-  &__delete {
-    align-self: flex-start;
-    padding: $space * 0.25;
-    color: $text-muted;
+  // Actions bar (react / edit / delete), floating at the top right, only visible while hovering
+  position: relative;
+
+  &__actions {
+    position: absolute;
+    top: -$space * 1.5;
+    right: $space * 2;
+    z-index: 1;
+    display: flex;
+    padding: 2px;
+    background: $bg-soft;
+    border: 1px solid $border;
+    border-radius: $radius;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.12s;
 
-    &:hover {
-      color: $danger;
+    button {
+      display: grid;
+      place-items: center;
+      padding: $space * 0.5;
+      background: none;
+      border: none;
+      color: $text-muted;
+
+      &:hover {
+        background: $bg-input;
+        color: $accent;
+      }
     }
   }
 
-  &:hover &__delete,
-  &__delete:focus-visible {
+  &__action--danger:hover {
+    color: $danger !important;
+  }
+
+  &:hover &__actions,
+  &__actions:focus-within {
     opacity: 1;
+    pointer-events: auto;
+  }
+
+  // "(edited)" after the text
+  &__edited {
+    color: $text-dim;
+    font-size: 0.75em;
+  }
+
+  // Message edited in place
+  &--editing {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  &__edit {
+    textarea {
+      @include field;
+      @include thin-scrollbar;
+      display: block;
+      width: 100%;
+      padding: $space;
+      resize: none;
+    }
+  }
+
+  &__edit-hint {
+    margin-top: $space * 0.5;
+    color: $text-muted;
+    font-size: 0.75em;
+  }
+}
+
+//* Reactions under a message: one pill per emoji (emoji + count), turquoise when I reacted with it
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space * 0.5;
+  margin-top: $space * 0.5;
+
+  &__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: $space * 0.5;
+    min-height: 26px;
+    padding: 0 $space * 0.75;
+    background: $bg-soft;
+    border: 1px solid $border;
+    border-radius: $radius;
+    color: $text-muted;
+    font-size: 0.85em;
+
+    &:hover:not(:disabled) {
+      border-color: $text-muted;
+    }
+
+    &--mine {
+      background: rgba($accent, 0.12);
+      border-color: $accent;
+      color: $accent;
+    }
+
+    // "+" pill: only shown on hover of the message, like the actions bar
+    &--add {
+      opacity: 0;
+      transition: opacity 0.12s;
+
+      .message:hover & {
+        opacity: 1;
+      }
+    }
+  }
+
+  &__emoji {
+    font-size: 1.15em;
+    line-height: 1;
   }
 }

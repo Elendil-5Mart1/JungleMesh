@@ -34,6 +34,7 @@ const DEFAULTS: AppSettings = {
   hideNotificationContent: false,
   contentProtection: false,
   autoUpdate: true,
+  autoEmbeds: false,
   imageTtlHours: 72
 }
 
@@ -91,6 +92,7 @@ export const createSettings = (onChange: (settings: AppSettings) => void) => {
     if (typeof saved.hideNotificationContent === 'boolean') current.hideNotificationContent = saved.hideNotificationContent
     if (typeof saved.contentProtection === 'boolean') current.contentProtection = saved.contentProtection
     if (typeof saved.autoUpdate === 'boolean') current.autoUpdate = saved.autoUpdate
+    if (typeof saved.autoEmbeds === 'boolean') current.autoEmbeds = saved.autoEmbeds
     if (isHours(saved.imageTtlHours)) current.imageTtlHours = saved.imageTtlHours
   } catch {
     // no file yet: default values
@@ -153,6 +155,7 @@ export const createSettings = (onChange: (settings: AppSettings) => void) => {
       if (typeof patch.hideNotificationContent === 'boolean') current.hideNotificationContent = patch.hideNotificationContent
       if (typeof patch.contentProtection === 'boolean') current.contentProtection = patch.contentProtection
       if (typeof patch.autoUpdate === 'boolean') current.autoUpdate = patch.autoUpdate
+      if (typeof patch.autoEmbeds === 'boolean') current.autoEmbeds = patch.autoEmbeds
       if (isHours(patch.imageTtlHours)) current.imageTtlHours = patch.imageTtlHours
       unlock()
       save()

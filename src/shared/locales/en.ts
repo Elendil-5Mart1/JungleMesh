@@ -63,9 +63,6 @@ export const en = {
     "soundTest": "Test",
     "soundFiles": "Audio files",
     "soundTooBig": "This file is too big (5 MB max).",
-    "mute": "Mute",
-    "muteHint": "A muted conversation shows no badge, notification or flashing. Messages are still received.",
-    "noConversations": "No conversation yet.",
     "autostart": "Launch when Windows starts",
     "autostartHint": "The app starts when you sign in and stays connected near the clock.",
     "autostartDev": "Only available in the installed app (not in development mode).",
@@ -117,12 +114,6 @@ export const en = {
     "title": "Room settings",
     "roomName": "Room name",
     "save": "Save",
-    "channels": "Channels",
-    "noChannels": "No channel to manage. Create some with \"+\".",
-    "rename": "Rename",
-    "deleteChannel": "Delete channel",
-    "delete": "Delete",
-    "deleteHint": "Deleting a channel removes it from the list; messages stay on the members' devices.",
     "members": "Members — {{count}}",
     "you": "(you)",
     "kick": "Remove",
@@ -187,7 +178,24 @@ export const en = {
   },
   "message": {
     "delete": "Delete message",
-    "deleteConfirm": "Click again to delete"
+    "deleteConfirm": "Click again to delete",
+    "edit": "Edit message",
+    "edited": "(edited)",
+    "editHint": "Enter to save · Escape to cancel",
+    "react": "Add reaction"
+  },
+  "embed": {
+    "play": "Play here",
+    "privacy": "Loads the {{name}} player: {{name}} will see your IP address.",
+    "close": "Close the player"
+  },
+  "textMenu": {
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "selectAll": "Select all",
+    "addWord": "Add to dictionary",
+    "noSuggestion": "No suggestion"
   },
   "composer": {
     "send": "Send",
@@ -195,6 +203,7 @@ export const en = {
     "removeFile": "Remove"
   },
   "file": {
+    "play": "Play",
     "download": "Download",
     "accept": "Accept and save…",
     "loading": "Loading image…",
@@ -213,12 +222,17 @@ export const en = {
     "openChat": "Send a message",
     "openRoom": "Open room",
     "mute": "Mute notifications",
-    "unmute": "Unmute notifications",    "addFriend": "Add as friend",
+    "unmute": "Unmute notifications",
+    "addFriend": "Add as friend",
     "removeFriend": "Remove friend",
     "removeFriendConfirm": "Click again to remove",
     "kick": "Remove from room",
     "kickConfirm": "Click again to remove",
-    "volume": "Volume — {{percent}}%"
+    "volume": "Volume — {{percent}}%",
+    "markRead": "Mark as read",
+    "renameChannel": "Rename channel",
+    "deleteChannel": "Delete channel",
+    "deleteChannelConfirm": "Click again to delete"
   },
   "room": {
     "notFound": "Room not found",
@@ -310,6 +324,10 @@ export const en = {
   "privacy": {
     "intro": "JungleMesh is peer-to-peer: there is no server hiding you. Your friends (and members of your rooms) connect to you directly, so they can see your IP address. Text and voice are always encrypted. The options below reduce what is exposed; for full anonymity also use a VPN.",
     "network": "Connections",
+    "blocked": "Blocked",
+    "noBlocked": "Nobody is blocked. Removing a friend or declining a request blocks them.",
+    "unblock": "Unblock",
+    "unblockHint": "A blocked person cannot connect to you or send you a request. Once unblocked, they can send you a new friend request, or you can add them back with their code: your past conversation comes back.",
     "images": "Shared images",
     "imageTtl": "Images disappear after",
     "imageTtlHint": "Images shared in your conversations are erased from this device after this delay (rooms can override it: the room's creator decides). A file you saved yourself is never touched.",
@@ -336,6 +354,9 @@ export const en = {
     "eraseAllAsk": "Erase all JungleMesh data on this device?",
     "resetDetail": "This cannot be undone. The app will restart.",
     "resetConfirm": "Yes, continue",
+    "embeds": "Embedded players",
+    "autoEmbeds": "Load players automatically",
+    "autoEmbedsHint": "YouTube, SoundCloud, Spotify… links show their player straight away, like on Discord. Each player you see connects you to that platform, which then sees your IP address, even if you never press play. Off: the player only loads when you click it.",
     "autoUpdate": "Check for updates",
     "autoUpdateHint": "Looks for a new version on GitHub at startup and once a day, so GitHub sees your IP address. Nothing is downloaded or installed without your agreement. Turn off to never contact GitHub.",
     "updates": "Updates",
@@ -393,6 +414,7 @@ export const en = {
     "fileUnavailable": "The file could not be fetched: the sender may be offline. Try again later.",
     "fileCorrupt": "The received file does not match what was announced",
     "fileNotImage": "This is not a displayable image",
+    "fileNotAudio": "This is not a playable audio file",
     "notAcceptedYet": "This contact hasn't accepted your request yet",
     "notMember": "You are not a member of this room",
     "voiceFull": "This voice channel is full ({{max}} people maximum)"

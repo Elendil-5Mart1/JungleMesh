@@ -1,0 +1,133 @@
+@use '../abstracts/variables' as *;
+
+//* Players of the links of a message (YouTube, SoundCloud…)
+.embeds {
+  display: flex;
+  flex-direction: column;
+  gap: $space;
+  margin-top: $space * 0.5;
+}
+
+.embed {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, 100%);
+  background: $bg-soft;
+  border: 1px solid $border;
+  // Colored edge on the left, like Discord's embeds: the color of the platform
+  border-left: 3px solid var(--embed-color, #{$accent});
+  border-radius: $radius;
+  overflow: hidden;
+
+  &--youtube {
+    --embed-color: #ff0033;
+  }
+  &--soundcloud {
+    --embed-color: #ff5500;
+  }
+  &--spotify {
+    --embed-color: #1ed760;
+  }
+  &--mixcloud {
+    --embed-color: #5000ff;
+  }
+
+  // Shorts: narrow, the video is vertical
+  &--vertical {
+    width: min(300px, 100%);
+  }
+
+  &__head {
+    display: flex;
+    align-items: baseline;
+    gap: $space;
+    min-width: 0;
+    padding: $space * 0.75 $space;
+    font-size: 0.85em;
+  }
+
+  &__provider {
+    flex-shrink: 0;
+    color: var(--embed-color);
+    font-weight: 600;
+  }
+
+  &__link {
+    min-width: 0;
+    overflow: hidden;
+    color: $text-muted;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover {
+      color: $text;
+    }
+  }
+
+  &__close {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    align-self: center;
+    margin-left: auto;
+    padding: 2px;
+    background: none;
+    border: none;
+    color: $text-muted;
+
+    &:hover {
+      color: $danger;
+    }
+  }
+
+  // Player not loaded yet: a big button with what loading it means
+  &__play {
+    display: flex;
+    align-items: center;
+    gap: $space * 1.5;
+    padding: $space * 1.5 $space * 2;
+    background: $bg-deep;
+    border: none;
+    border-top: 1px solid $line;
+    color: $text;
+    text-align: left;
+
+    .icon {
+      flex-shrink: 0;
+      color: var(--embed-color);
+    }
+
+    span {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    small {
+      color: $text-muted;
+      font-size: 0.8em;
+    }
+
+    &:hover strong {
+      color: $accent-bright;
+    }
+  }
+
+  &__frame {
+    display: block;
+    width: 100%;
+    border: none;
+    background: #000;
+  }
+
+  // Videos: sized by their aspect ratio (audio players have a fixed height, set inline)
+  &--video &__frame {
+    aspect-ratio: 16 / 9;
+  }
+  &--vertical &__frame {
+    aspect-ratio: 9 / 16;
+  }
+  &--audio &__frame {
+    background: transparent;
+  }
+}

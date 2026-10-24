@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import type { AppSettings, ChatMessage, CoreState, UnreadCounts } from '../../../shared/types'
 import { playNotifSound, startRing } from '@/utils/notifSound'
+import { annotate, type Annotation } from '../../../shared/annotations'
 
 interface CoreStore extends Partial<CoreState> {
   messages: Record<string, ChatMessage[]> // friend key → messages
@@ -18,6 +19,7 @@ interface CoreStore extends Partial<CoreState> {
   loadHistory: (key: string) => Promise<void>
   addMessage: (key: string, msg: ChatMessage) => void
   removeMessage: (key: string, id: string, author: string) => void
+  annotateMessage: (key: string, annotation: Annotation) => void
 }
 
 export const useCoreStore = create<CoreStore>((set, get) => ({
@@ -56,7 +58,21 @@ export const useCoreStore = create<CoreStore>((set, get) => ({
   removeMessage: (key, id, author) =>
     set((s) =>
       s.messages[key] ? { messages: { ...s.messages, [key]: s.messages[key].filter((m) => !(m.id === id && m.from === author)) } } : s
-    )
+    ),
+  // Edit or reaction received live: same rules as the history (shared/annotations.ts)
+  annotateMessage: (key, annotation) =>
+    set((s) => {
+      const list = s.messages[key]
+      if (!list) return s // not displayed here (the next history load applies it)
+      // Every message with that id (annotate keeps only the one of the right author)
+      let changed = false
+      const next = list.map((m) => {
+        const after = annotate(m, annotation)
+        if (after !== m) changed = true
+        return after
+      })
+      return changed ? { messages: { ...s.messages, [key]: next } } : s
+    })
 }))
 
 //& Single hook-up to the IPC events (called once when the module loads)
@@ -64,6 +80,7 @@ void window.api.getState().then(useCoreStore.getState().setState)
 window.api.onState(useCoreStore.getState().setState)
 window.api.onMessage(useCoreStore.getState().addMessage)
 window.api.onMessageDeleted((key, id, author) => useCoreStore.getState().removeMessage(key, id, author))
+window.api.onMessageAnnotated((key, annotation) => useCoreStore.getState().annotateMessage(key, annotation))
 void window.api.getUnread().then(useCoreStore.getState().setUnread)
 window.api.onUnread(useCoreStore.getState().setUnread)
 void window.api.getSettings().then(useCoreStore.getState().setSettings)

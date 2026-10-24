@@ -36,13 +36,53 @@ export const Composer = ({ disabled, placeholder, onSend, attachable }: Composer
     const onKey = (e: globalThis.KeyboardEvent): void => {
       if (e.key === 'Escape') setEmojiOpen(false)
     }
+    // Click in another app: the window loses the focus, the picker closes too
+    const onBlur = (): void => setEmojiOpen(false)
     document.addEventListener('pointerdown', onDown)
     document.addEventListener('keydown', onKey)
+    window.addEventListener('blur', onBlur)
     return () => {
       document.removeEventListener('pointerdown', onDown)
       document.removeEventListener('keydown', onKey)
+      window.removeEventListener('blur', onBlur)
     }
   }, [emojiOpen])
+
+  // The window comes to the foreground → the cursor goes to the input, ready to type.
+  // Not if another field has the focus (renaming, modal) or if the user is selecting text:
+  // a click that activates the window waits for the button to be released.
+  useEffect(() => {
+    let pressed = false
+    const onDown = (): void => {
+      pressed = true
+    }
+    const onUp = (): void => {
+      pressed = false
+    }
+    const grab = (): void => {
+      const el = inputRef.current
+      const active = document.activeElement
+      if (!el || el.disabled || window.getSelection()?.isCollapsed === false) return
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement) return
+      if (active?.closest('[role="dialog"]')) return
+      el.focus()
+    }
+    // A short delay: on a click, Windows activates the window before the page receives the pointerdown
+    const onFocus = (): void => {
+      setTimeout(() => {
+        if (pressed) document.addEventListener('pointerup', () => setTimeout(grab), { once: true })
+        else grab()
+      }, 100)
+    }
+    document.addEventListener('pointerdown', onDown, true)
+    document.addEventListener('pointerup', onUp, true)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true)
+      document.removeEventListener('pointerup', onUp, true)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [])
 
   // Previews of the staged files (an object URL per image, released when the list changes)
   const previews = useMemo(() => staged.map((f) => (f.type.startsWith('image/') ? URL.createObjectURL(f) : null)), [staged])

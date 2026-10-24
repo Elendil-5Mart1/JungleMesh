@@ -93,9 +93,18 @@ export const useVoice = (roomKey: string, myKey: string | undefined, voice: Reco
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participantsKey])
 
-  // Call cut by the core (another voice window, room left…): no more me in the list
+  // Call cut by the core (another voice window, room left…): I WAS in the list, and I am no longer.
+  // "Was" matters: the core's state arrives a moment after voiceJoin resolves (it is batched), so right
+  // after joining the list does not contain me yet; hanging up then killed every call at once.
+  const listed = useRef(false)
   useEffect(() => {
-    if (status?.phase === 'live' && myKey && participants && !participants.includes(myKey)) stop()
+    if (status?.phase !== 'live' || !myKey) {
+      listed.current = false
+      return
+    }
+    const inList = !!participants?.includes(myKey)
+    if (inList) listed.current = true
+    else if (listed.current) stop()
   }, [status?.phase, participantsKey, myKey, participants, stop])
 
   // Window closing: we hang up

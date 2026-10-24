@@ -11,6 +11,7 @@ import { findInviteCode, SCHEME } from './inviteLink'
 import { createSettings } from './settings'
 import { createTray } from './tray'
 import { startUpdater } from './updater'
+import { setupSpellcheck } from './textMenu'
 import {
   MIN_PASSPHRASE,
   IDENTITY_FILES,
@@ -217,11 +218,20 @@ const notifier = createNotifier({
 // By default Electron grants ALL web permissions (camera, geolocation, notifications…): we only allow the microphone
 // and camera, writing to the clipboard ("copy" buttons) and full screen (⛶ button of the call stage).
 // Reading the clipboard stays refused.
+// The embedded players (YouTube, SoundCloud… in an iframe) only get full screen: microphone, camera and
+// clipboard stay for our own pages.
 const GRANTABLE = new Set(['media', 'clipboard-sanitized-write', 'fullscreen'])
-const grantable = (permission: string): boolean => GRANTABLE.has(permission)
+const grantable = (permission: string, url: string): boolean =>
+  GRANTABLE.has(permission) && (permission === 'fullscreen' || fromOurUrl(url))
 const lockPermissions = (): void => {
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(grantable(permission)))
-  session.defaultSession.setPermissionCheckHandler((_wc, permission) => grantable(permission))
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback, details) => callback(grantable(permission, details.requestingUrl)))
+  session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) => grantable(permission, origin))
+  // YouTube's embedded player refuses to play (error 153) without a Referer saying which site embeds it,
+  // and our pages are file:// (no Referer at all). We add one, only to the requests of the YouTube player.
+  // See the tutorial in manual.md.
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube-nocookie.com/*'] }, (details, callback) =>
+    callback({ requestHeaders: { ...details.requestHeaders, Referer: EMBED_REFERER } })
+  )
   // Screen sharing: Chromium asks here WHAT to capture when a page calls getDisplayMedia.
   // We only answer with the source the user just picked in our own picker (screen:choose), once:
   // a page cannot capture the screen on its own, without that click.
@@ -238,6 +248,9 @@ const lockPermissions = (): void => {
     callback({ video: source, audio: choice!.audio && process.platform === 'win32' ? 'loopback' : undefined })
   })
 }
+
+// Site given to YouTube as the one embedding its player: the project's page (we do not own another domain)
+const EMBED_REFERER = 'https://github.com/Elendil-5Mart1/JungleMesh'
 
 // Source picked in the picker, waiting for the page's getDisplayMedia (see above)
 let screenChoice: { id: string; audio: boolean; at: number } | null = null
@@ -284,6 +297,7 @@ ipcMain.handle('rooms:kick', (_e, room: string, member: string) => core.kickFrom
 ipcMain.handle('rooms:leave', (_e, room: string) => core.leaveRoom(asKey(room)))
 ipcMain.handle('rooms:delete', (_e, room: string) => core.deleteRoom(asKey(room)))
 ipcMain.handle('friends:remove', (_e, key: string) => core.removeFriend(asKey(key)))
+ipcMain.handle('friends:unblock', (_e, key: string) => core.unblock(asKey(key)))
 ipcMain.handle('rooms:invite', (_e, room: string, friend: string) => core.inviteToRoom(asKey(room), asKey(friend)))
 ipcMain.handle('rooms:accept', (_e, room: string) => core.acceptRoomInvite(asKey(room)))
 ipcMain.handle('rooms:decline', (_e, room: string) => core.declineRoomInvite(asKey(room)))
@@ -300,6 +314,13 @@ ipcMain.handle('files:sendBytes', (_e, convId: string, name: string, bytes: unkn
 })
 ipcMain.handle('chat:delete', (_e, convId: string, id: string) => core.deleteMessage(asKey(convId), String(id).slice(0, 64)))
 core.on('message-deleted', (convId, id, author) => broadcast('chat:deleted', convId, id, author))
+ipcMain.handle('chat:edit', (_e, convId: string, id: string, text: string) =>
+  core.editMessage(asKey(convId), String(id).slice(0, 64), String(text))
+)
+ipcMain.handle('chat:react', (_e, convId: string, id: string, to: string, emoji: string, on: boolean) =>
+  core.react(asKey(convId), String(id).slice(0, 64), asKey(to), String(emoji), on === true)
+)
+core.on('message-annotated', (convId, annotation) => broadcast('chat:annotated', convId, annotation))
 ipcMain.handle('files:image', (_e, coreKey: string) => core.imageDataUrl(asKey(coreKey)))
 // "Download": the user chooses where to save; the file is never opened by the app
 // The transfer only starts AFTER the user accepted and chose the destination; progress goes back to the windows.
@@ -311,6 +332,13 @@ ipcMain.handle('files:save', async (e, coreKey: string, name: string) => {
   await writeFile(filePath, await core.readFile(key))
   void core.releaseFile(key) // the user's copy is the one that counts: we free the app's own storage
   return true
+})
+// Audio player: the bytes go to the window (a Blob there), then the app's copy is freed like after a download
+ipcMain.handle('files:audio', async (_e, coreKey: string) => {
+  const key = asKey(coreKey)
+  const audio = await core.audioBytes(key)
+  void core.releaseFile(key)
+  return audio
 })
 ipcMain.handle('rooms:setImageTtl', (_e, room: string, hours: number | null) => core.setRoomImageTtl(asKey(room), hours))
 core.on('file-progress', (key, done, total) => broadcast('files:progress', key, done, total))
@@ -351,6 +379,8 @@ ipcMain.handle('invite:clear', () => {
   pendingInvite = null
 })
 ipcMain.handle('unread:get', () => notifier.getUnread())
+// Right click › Mark as read in the home window, without opening the conversation
+ipcMain.handle('unread:markRead', (_e, key: string) => notifier.markRead(asKey(key)))
 ipcMain.handle('settings:get', () => settings.get())
 ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
   settings.update(patch)
@@ -527,6 +557,7 @@ app.on('second-instance', (_e, argv) => {
 app.whenReady().then(async () => {
   await setupI18n()
   lockPermissions()
+  setupSpellcheck()
   core.setStealth(settings.get().stealth)
   core.setImageTtl(settings.get().imageTtlHours)
   await core.start()

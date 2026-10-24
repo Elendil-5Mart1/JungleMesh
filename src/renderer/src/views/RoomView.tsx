@@ -51,6 +51,8 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
   const [inviting, setInviting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [menu, setMenu] = useState<{ key: string; spot: MenuSpot } | null>(null) // right click on a person
+  const [chanMenu, setChanMenu] = useState<{ id: string; spot: MenuSpot } | null>(null) // right click on a channel
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null) // channel renamed in place
   const [volume, setVolume] = useState(1) // volume of the person in the open menu
   const [error, setError] = useState('')
   // Resizable side columns (width remembered)
@@ -141,6 +143,22 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
     }
   }
 
+  // Channel renamed in place (right click › Rename): Enter saves, Escape or leaving the field cancels
+  const submitRename = async (e: FormEvent): Promise<void> => {
+    e.preventDefault()
+    if (!renaming) return
+    if (await run(() => window.api.renameChannel(roomKey, renaming.id, renaming.name))) setRenaming(null)
+  }
+
+  // Right click on a channel. 'general' is the default channel: it can be neither renamed nor deleted.
+  // No item for this channel (member on 'general'): no menu at all.
+  const openChanMenu = (c: (typeof room.channels)[number]) => (e: React.MouseEvent) => {
+    const manageable = room.isOwner && c.id !== 'general'
+    if (!manageable && c.kind !== 'text') return
+    e.preventDefault()
+    setChanMenu({ id: c.id, spot: { x: e.clientX, y: e.clientY } })
+  }
+
   const author = (key: string): Author => {
     const m = room.members.find((x) => x.key === key)
     return { name: m?.name ?? key.slice(0, 8), avatar: m?.avatar ?? null }
@@ -204,14 +222,28 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
         const unseen = c.kind === 'text' && c.id !== channel.id && (byChannel[c.id]?.length ?? 0) > (seen[c.id] ?? 0)
         return (
           <div key={c.id}>
-            <button
-              type="button"
-              className={`room-nav__channel ${c.id === channel.id ? 'room-nav__channel--active' : ''} ${unseen ? 'room-nav__channel--unread' : ''}`}
-              onClick={() => openChannel(c)}
-            >
-              <span className="room-nav__icon">{c.kind === 'text' ? '#' : <Icon name="volume" size={16} />}</span>
-              <span className="room-nav__name">{c.name}</span>
-            </button>
+            {renaming?.id === c.id ? (
+              <form className="room-nav__form" onSubmit={(e) => void submitRename(e)}>
+                <input
+                  autoFocus
+                  maxLength={32}
+                  value={renaming.name}
+                  onChange={(e) => setRenaming({ id: c.id, name: e.target.value })}
+                  onKeyDown={(e) => e.key === 'Escape' && setRenaming(null)}
+                  onBlur={() => setRenaming(null)}
+                />
+              </form>
+            ) : (
+              <button
+                type="button"
+                className={`room-nav__channel ${c.id === channel.id ? 'room-nav__channel--active' : ''} ${unseen ? 'room-nav__channel--unread' : ''}`}
+                onClick={() => openChannel(c)}
+                onContextMenu={openChanMenu(c)}
+              >
+                <span className="room-nav__icon">{c.kind === 'text' ? '#' : <Icon name="volume" size={16} />}</span>
+                <span className="room-nav__name">{c.name}</span>
+              </button>
+            )}
             {/* Who is in this voice channel */}
             {c.kind === 'voice' && (room.voice[c.id]?.length ?? 0) > 0 && (
               <div className="voicers">
@@ -397,6 +429,8 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
               empty={t('room.channelStart', { name: channel.name })}
               imageTtlHours={room.imageTtl ?? settings?.imageTtlHours}
               onDelete={(id) => void run(() => window.api.deleteMessage(roomKey, id))}
+              onEdit={(id, text) => void run(() => window.api.editMessage(roomKey, id, text))}
+              onReact={(id, to, emoji, on) => void run(() => window.api.react(roomKey, id, to, emoji, on))}
             />
             <Composer
               disabled={room.status !== 'joined'}
@@ -505,6 +539,48 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
                   confirmLabel={t('menu.kickConfirm')}
                   onSelect={() => {
                     void window.api.kickFromRoom(room.key, menu.key).catch((err) => setError(cleanError(err)))
+                    close()
+                  }}
+                />
+              </>
+            )}
+          </ContextMenu>
+        )
+      })()}
+
+      {chanMenu && (() => {
+        const c = room.channels.find((x) => x.id === chanMenu.id)
+        if (!c) return null
+        const manageable = room.isOwner && c.id !== 'general'
+        const close = (): void => setChanMenu(null)
+        return (
+          <ContextMenu spot={chanMenu.spot} onClose={close}>
+            <div className="ctx__title">{c.kind === 'text' ? `# ${c.name}` : c.name}</div>
+            {c.kind === 'text' && (
+              <MenuItem
+                label={t('menu.markRead')}
+                onSelect={() => {
+                  setSeen((prev) => ({ ...prev, [c.id]: byChannel[c.id]?.length ?? 0 }))
+                  close()
+                }}
+              />
+            )}
+            {manageable && (
+              <>
+                <MenuItem
+                  label={t('menu.renameChannel')}
+                  onSelect={() => {
+                    setRenaming({ id: c.id, name: c.name })
+                    close()
+                  }}
+                />
+                <div className="ctx__sep" />
+                <MenuItem
+                  danger
+                  label={t('menu.deleteChannel')}
+                  confirmLabel={t('menu.deleteChannelConfirm')}
+                  onSelect={() => {
+                    void run(() => window.api.deleteChannel(roomKey, c.id))
                     close()
                   }}
                 />

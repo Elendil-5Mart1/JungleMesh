@@ -82,6 +82,12 @@ export const ChatView = ({ friendKey }: { friendKey: string }) => {
   const remove = (id: string): void => {
     void window.api.deleteMessage(friendKey, id).catch((err) => setError(cleanError(err)))
   }
+  const editMessage = (id: string, text: string): void => {
+    void window.api.editMessage(friendKey, id, text).catch((err) => setError(cleanError(err)))
+  }
+  const react = (id: string, to: string, emoji: string, on: boolean): void => {
+    void window.api.react(friendKey, id, to, emoji, on).catch((err) => setError(cleanError(err)))
+  }
 
   const changeVolume = (value: number): void => {
     setVolume(value)
@@ -148,7 +154,15 @@ export const ChatView = ({ friendKey }: { friendKey: string }) => {
           />
         </CallStage>
       )}
-      <MessageList messages={messages} myKey={me?.publicKey} author={author} imageTtlHours={settings?.imageTtlHours} onDelete={remove} />
+      <MessageList
+        messages={messages}
+        myKey={me?.publicKey}
+        author={author}
+        imageTtlHours={settings?.imageTtlHours}
+        onDelete={remove}
+        onEdit={editMessage}
+        onReact={react}
+      />
 
       {error && <p className="chat__error">{error}</p>}
       <Composer

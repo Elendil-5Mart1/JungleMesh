@@ -1,6 +1,7 @@
 //* Preload: exposes a limited API to React (window.api), and nothing else from Node
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { AppSettings, ChatApi, ChatMessage, CoreState, UnreadCounts, VoiceSignal } from '../shared/types'
+import type { Annotation } from '../shared/annotations'
 
 const api: ChatApi = {
   getState: () => ipcRenderer.invoke('core:getState'),
@@ -21,6 +22,7 @@ const api: ChatApi = {
   leaveRoom: (room) => ipcRenderer.invoke('rooms:leave', room),
   deleteRoom: (room) => ipcRenderer.invoke('rooms:delete', room),
   removeFriend: (key) => ipcRenderer.invoke('friends:remove', key),
+  unblock: (key) => ipcRenderer.invoke('friends:unblock', key),
   inviteToRoom: (room, friend) => ipcRenderer.invoke('rooms:invite', room, friend),
   acceptRoomInvite: (room) => ipcRenderer.invoke('rooms:accept', room),
   declineRoomInvite: (room) => ipcRenderer.invoke('rooms:decline', room),
@@ -30,6 +32,7 @@ const api: ChatApi = {
   toggleRoom: (key) => ipcRenderer.invoke('window:toggleRoom', key),
   getVisibleWindows: () => ipcRenderer.invoke('windows:visible'),
   getUnread: () => ipcRenderer.invoke('unread:get'),
+  markRead: (key) => ipcRenderer.invoke('unread:markRead', key),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
   openSettings: () => ipcRenderer.invoke('window:openSettings'),
@@ -113,7 +116,15 @@ const api: ChatApi = {
     ipcRenderer.on('chat:deleted', listener)
     return () => ipcRenderer.removeListener('chat:deleted', listener)
   },
+  editMessage: (convId, id, text) => ipcRenderer.invoke('chat:edit', convId, id, text),
+  react: (convId, id, to, emoji, on) => ipcRenderer.invoke('chat:react', convId, id, to, emoji, on),
+  onMessageAnnotated: (cb) => {
+    const listener = (_e: IpcRendererEvent, convId: string, annotation: Annotation): void => cb(convId, annotation)
+    ipcRenderer.on('chat:annotated', listener)
+    return () => ipcRenderer.removeListener('chat:annotated', listener)
+  },
   getImage: (coreKey) => ipcRenderer.invoke('files:image', coreKey),
+  getAudio: (coreKey) => ipcRenderer.invoke('files:audio', coreKey),
   saveFile: (coreKey, name) => ipcRenderer.invoke('files:save', coreKey, name),
   voiceJoin: (room, chan) => ipcRenderer.invoke('voice:join', room, chan),
   voiceLeave: () => ipcRenderer.invoke('voice:leave'),

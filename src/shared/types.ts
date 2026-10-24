@@ -1,6 +1,7 @@
 //* Types shared between the main process, the preload and the React windows
 // A single place to describe the data: if we change a field, TypeScript
 // flags all the places to adapt, on both sides of the IPC.
+import type { Annotation } from './annotations'
 
 // Avatar = 128×128 image encoded as a "data URL" (data:image/webp;base64,…), or null
 export type Avatar = string | null
@@ -70,14 +71,24 @@ export interface ChatMessage {
   file?: { core: string; name: string; size: number; mime: string; image: boolean } // attachment (image or other file)
   system?: boolean // informational message ("X joined the room"), not written by a human
   call?: CallEvent // DM call event (system line, its text is built by the window with the author's name)
+  edited?: number // date of the last edit by its author (missing = never edited)
+  reactions?: Record<string, string[]> // emoji → keys of the people who reacted with it
 }
 
 // conversation key (friend or room) → number of unread messages (missing = 0)
 export type UnreadCounts = Record<string, number>
 
+// Person I removed or whose request I declined: refused at connection (Settings › Privacy › Blocked)
+export interface BlockedContact {
+  key: string
+  name: string
+  avatar: Avatar
+}
+
 export interface CoreState {
   me: Me
   friends: Friend[]
+  blocked: BlockedContact[]
   rooms: Room[]
 }
 
@@ -119,6 +130,7 @@ export interface AppSettings {
   contentProtection: boolean // windows do not appear in screenshots / screen sharing
   imageTtlHours: number // default lifetime of shared images in my conversations (0 = never)
   autoUpdate: boolean // look for new versions on GitHub (it sees our IP); nothing is installed without asking
+  autoEmbeds: boolean // YouTube / SoundCloud… players load without a click (the platform then sees our IP)
 }
 
 // WebRTC signal (offer, answer, ICE candidate) received from another member of the voice channel
@@ -158,12 +170,17 @@ export interface ChatApi {
   sendFileBytes: (convId: string, name: string, bytes: Uint8Array, channel?: string, text?: string) => Promise<void>
   deleteMessage: (convId: string, id: string) => Promise<void>
   onMessageDeleted: (cb: (convId: string, id: string, author: string) => void) => () => void
+  editMessage: (convId: string, id: string, text: string) => Promise<void> // one of MY messages
+  react: (convId: string, id: string, to: string, emoji: string, on: boolean) => Promise<void> // to = the message's author
+  onMessageAnnotated: (cb: (convId: string, annotation: Annotation) => void) => () => void
   getImage: (coreKey: string) => Promise<string>
+  getAudio: (coreKey: string) => Promise<{ mime: string; bytes: Uint8Array }> // shared audio file, for the player
   saveFile: (coreKey: string, name: string) => Promise<boolean>
   setRoomImageTtl: (roomKey: string, hours: number | null) => Promise<void>
   onFileProgress: (cb: (coreKey: string, done: number, total: number) => void) => () => void
   deleteRoom: (roomKey: string) => Promise<void>
   removeFriend: (key: string) => Promise<void>
+  unblock: (key: string) => Promise<void>
   inviteToRoom: (roomKey: string, friendKey: string) => Promise<void>
   acceptRoomInvite: (roomKey: string) => Promise<void>
   declineRoomInvite: (roomKey: string) => Promise<void>
@@ -178,6 +195,7 @@ export interface ChatApi {
   getVisibleWindows: () => Promise<string[]>
   onVisibleWindows: (cb: (ids: string[]) => void) => () => void
   getUnread: () => Promise<UnreadCounts>
+  markRead: (key: string) => Promise<void> // friend or room: its badge goes out without opening it
   // App settings (Settings window)
   getSettings: () => Promise<AppSettings>
   setSettings: (patch: Partial<AppSettings>) => Promise<void>

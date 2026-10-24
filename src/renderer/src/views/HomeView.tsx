@@ -397,6 +397,15 @@ export const HomeView = () => {
               }}
             />
           )}
+          {(unread[menu.key] ?? 0) > 0 && (
+            <MenuItem
+              label={t('menu.markRead')}
+              onSelect={() => {
+                void window.api.markRead(menu.key)
+                setMenu(null)
+              }}
+            />
+          )}
           {(!menu.friend || menu.friend.status === 'accepted') && (
             <MenuItem
               label={muted.includes(menu.key) ? t('menu.unmute') : t('menu.mute')}

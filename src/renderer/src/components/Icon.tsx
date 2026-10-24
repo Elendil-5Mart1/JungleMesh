@@ -75,6 +75,13 @@ const ICONS = {
   play: <path d="M7 4.5 19 12 7 19.5z" />,
   crown: <path d="M4 18h16M4.5 15 3 7l5 4 4-6 4 6 5-4-1.5 8z" />,
   pencil: <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />,
+  trash: <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" />,
+  smile: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 14.2c1 1.6 2.3 2.4 4 2.4s3-.8 4-2.4M9 9.5h.01M15 9.5h.01" />
+    </>
+  ),
   file: (
     <>
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />

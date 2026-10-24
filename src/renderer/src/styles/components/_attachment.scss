@@ -28,6 +28,7 @@
     border-radius: $radius;
     object-fit: contain;
     object-position: left top;
+    cursor: zoom-in;
   }
 
   // Download arrow, only visible while the mouse is over the picture
@@ -83,6 +84,31 @@
     white-space: nowrap;
   }
 
+  // Play button of an audio file (in place of the file icon)
+  &__play {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: rgba($accent, 0.12);
+    border: 1px solid $accent;
+    border-radius: 50%;
+    color: $accent;
+
+    &:hover:not(:disabled) {
+      background: rgba($accent, 0.25);
+    }
+  }
+
+  // Player once the audio is fetched: as wide as the card
+  &__audio {
+    width: 100%;
+    min-width: 260px;
+    height: 36px;
+    color-scheme: dark; // Chromium's native controls in their dark version (white by default)
+  }
+
   &__btn {
     padding: $space * 0.25 $space;
     color: $accent;
@@ -126,5 +152,32 @@
   }
   to {
     margin-left: 70%;
+  }
+}
+
+//* Image shown full window (click on an image in the chat; click or Escape closes it)
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $space;
+  padding: $space * 3;
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+
+  &__image {
+    max-width: 100%;
+    max-height: calc(100% - #{$space * 4});
+    object-fit: contain;
+    border-radius: $radius;
+  }
+
+  &__caption {
+    color: $text-muted;
+    font-size: 0.85em;
   }
 }
