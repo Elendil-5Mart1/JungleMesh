@@ -5,6 +5,11 @@ name: Mac test build
 # Not signed by an Apple developer account (ad-hoc signature only): see manual.md for how a tester opens it.
 on:
   workflow_dispatch:
+    inputs:
+      electron:
+        description: 'Older Electron for an older macOS, e.g. 37 for macOS 11 Big Sur (test only: no more security fixes). Empty = the project version.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -14,6 +19,7 @@ jobs:
     runs-on: macos-15
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false # never look for a signing certificate in the runner's keychain
+      ELECTRON_VERSION: ${{ inputs.electron }} # (through env, never pasted into the shell command)
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -21,10 +27,19 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Older Electron for this run only (package.json and the lockfile stay untouched)
+      - if: inputs.electron != ''
+        run: npm install --no-save "electron@$ELECTRON_VERSION"
       - run: npm run typecheck
-      - run: npm run dist:mac
+      - name: Build
+        run: |
+          if [ -n "$ELECTRON_VERSION" ]; then
+            npm run dist:mac -- "-c.electronVersion=$(node -p "require('electron/package.json').version")"
+          else
+            npm run dist:mac
+          fi
       - uses: actions/upload-artifact@v7
         with:
-          name: JungleMesh-mac
+          name: JungleMesh-mac${{ inputs.electron && format('-electron{0}', inputs.electron) || '' }}
           path: dist/*.dmg
           retention-days: 14
