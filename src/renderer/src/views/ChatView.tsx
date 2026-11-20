@@ -155,6 +155,7 @@ export const ChatView = ({ friendKey }: { friendKey: string }) => {
         </CallStage>
       )}
       <MessageList
+        convId={friendKey}
         messages={messages}
         myKey={me?.publicKey}
         author={author}

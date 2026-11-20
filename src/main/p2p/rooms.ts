@@ -383,6 +383,19 @@ export class RoomManager {
     await rt.myCore.append({ type: 'react', id, to, emoji, on, ts: Date.now() } satisfies JournalEntry)
   }
 
+  // File receipt / file freed by its sender: an entry in my own log (see releaseDelivered in core.ts)
+  async appendOwn(roomKey: string, entry: JournalEntry): Promise<void> {
+    const rt = this.rooms.get(roomKey)
+    if (!rt?.myCore || rt.saved.status !== 'joined') return
+    await rt.myCore.append(entry)
+  }
+
+  // Who must receive a file sent at `ts` by `sender`: the members signed up before it, still in the room
+  recipients(roomKey: string, ts: number, sender: string): string[] {
+    const rt = this.rooms.get(roomKey)
+    return rt ? [...rt.members.values()].filter((m) => m.key !== sender && m.since <= ts).map((m) => m.key) : []
+  }
+
   //& Control messages received from a friend
   async onControl(from: string, raw: unknown): Promise<void> {
     const msg = raw as Partial<{ type: string; room: string; name: string; core: string; owner: string }>

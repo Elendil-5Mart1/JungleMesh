@@ -5,6 +5,8 @@
 //   then a progress bar follows the transfer.
 // - Audio (mp3, ogg, wav, flac, m4a): the same card with a play button; the bytes are only fetched on that
 //   click, then played by an <audio> player (samples, demos…).
+// - A plain file is a transfer: its sender sees who received it, and once everyone did (or after 7 days)
+//   the sender frees it and the card says it is no longer available (see releaseDelivered in core.ts).
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '../../../shared/types'
@@ -12,15 +14,21 @@ import { cleanError } from '@/utils/errors'
 import { Icon } from '@/components/Icon'
 
 const formatSize = (bytes: number): string =>
-  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : bytes < 1024 ** 3
+      ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+      : `${(bytes / 1024 ** 3).toFixed(2)} GB`
 
 interface FileCardProps {
   file: NonNullable<ChatMessage['file']>
   ts: number // date of the message (the delay of an image counts from there)
   ttlHours: number // lifetime of images in this conversation, 0 = never
+  convId: string // friend or room: where the receipt goes once saved
+  mine: boolean // I sent it
 }
 
-export const FileCard = ({ file, ts, ttlHours }: FileCardProps) => {
+export const FileCard = ({ file, ts, ttlHours, convId, mine }: FileCardProps) => {
   const { t } = useTranslation()
   const [src, setSrc] = useState<string | null>(null)
   const [naturalWidth, setNaturalWidth] = useState<number | undefined>()
@@ -101,7 +109,7 @@ export const FileCard = ({ file, ts, ttlHours }: FileCardProps) => {
     setProgress(null)
     setTransfer('running')
     try {
-      const saved = await window.api.saveFile(file.core, file.name)
+      const saved = await window.api.saveFile(convId, file.core, file.name)
       setTransfer(saved ? 'done' : 'idle')
     } catch (err) {
       setTransfer('idle')
@@ -173,12 +181,14 @@ export const FileCard = ({ file, ts, ttlHours }: FileCardProps) => {
           {file.name}
         </span>
         <span className="attachment__size">{formatSize(file.size)}</span>
-        {transfer === 'idle' && (
+        {transfer === 'idle' && !file.gone && (
           <button type="button" className="attachment__btn" onClick={() => void download()}>
             {t('file.accept')}
           </button>
         )}
         {transfer === 'done' && <span className="attachment__size">{t('file.saved')}</span>}
+        {mine && !!file.receivedBy?.length && <span className="attachment__size">{t('file.received', { count: file.receivedBy.length })}</span>}
+        {file.gone && transfer !== 'done' && <span className="attachment__size">{t('file.gone')}</span>}
       </div>
       {audioUrl && <audio className="attachment__audio" src={audioUrl} controls autoPlay />}
       {(transfer === 'running' || audioLoading) && (

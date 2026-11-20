@@ -15,7 +15,6 @@ interface ComposerProps {
 }
 
 const MAX_FILES = 5 // staged at once
-const MAX_FILE_SIZE = 25 * 1024 * 1024 // same limit as the main process, checked early to tell the user right away
 
 export const Composer = ({ disabled, placeholder, onSend, attachable }: ComposerProps) => {
   const { t } = useTranslation()
@@ -90,9 +89,9 @@ export const Composer = ({ disabled, placeholder, onSend, attachable }: Composer
 
   const stage = (files: File[]): void => {
     if (!attachable || disabled || files.length === 0) return
-    const tooBig = files.find((f) => f.size > MAX_FILE_SIZE)
-    setStageError(tooBig ? t('err.fileTooBig', { max: MAX_FILE_SIZE / 1024 / 1024 }) : files.some((f) => f.size === 0) ? t('err.fileEmpty') : '')
-    const ok = files.filter((f) => f.size > 0 && f.size <= MAX_FILE_SIZE)
+    // No size limit: a big file is read from the disk block by block by the main process (see the preload)
+    setStageError(files.some((f) => f.size === 0) ? t('err.fileEmpty') : '')
+    const ok = files.filter((f) => f.size > 0)
     setStaged((prev) => [...prev, ...ok].slice(0, MAX_FILES))
     inputRef.current?.focus()
   }

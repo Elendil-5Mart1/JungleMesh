@@ -208,6 +208,9 @@ export const en = {
     "accept": "Accept and save…",
     "loading": "Loading image…",
     "saved": "Saved",
+    "received_one": "Received ✓",
+    "received_other": "Received by {{count}}",
+    "gone": "No longer available (transfer over)",
     "expired": "Image deleted (its lifetime is over)"
   },
   "ttl": {

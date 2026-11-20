@@ -1,7 +1,9 @@
 //* Preload: exposes a limited API to React (window.api), and nothing else from Node
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { AppSettings, ChatApi, ChatMessage, CoreState, UnreadCounts, VoiceSignal } from '../shared/types'
 import type { Annotation } from '../shared/annotations'
+
+const MAX_INLINE_SIZE = 25 * 1024 * 1024 // same as journal.ts: what may travel as bytes (a file without a path)
 
 const api: ChatApi = {
   getState: () => ipcRenderer.invoke('core:getState'),
@@ -103,7 +105,15 @@ const api: ChatApi = {
   windowClose: () => ipcRenderer.send('win:close'),
   windowResizeStart: () => ipcRenderer.send('win:resizeStart'),
   windowResize: (edge, dx, dy) => ipcRenderer.send('win:resize', edge, dx, dy),
-  sendFileBytes: (convId, name, bytes, channel, text) => ipcRenderer.invoke('files:sendBytes', convId, name, bytes, channel, text),
+  // A file from the disk (picked or dropped) goes as its path, whatever its size: the main process reads it block by
+  // block. The page only hands a File: it never sees the path, and cannot make up one to send another file of the disk.
+  // Without a path (picture pasted from the clipboard), the bytes go, under MAX_INLINE_SIZE.
+  sendFile: async (convId, file, channel, text) => {
+    const path = webUtils.getPathForFile(file)
+    if (path) return ipcRenderer.invoke('files:sendPath', convId, file.name, path, channel, text)
+    const bytes = file.size > MAX_INLINE_SIZE ? null : new Uint8Array(await file.arrayBuffer()) // null: refused (translated) by main
+    return ipcRenderer.invoke('files:sendBytes', convId, file.name, bytes, channel, text)
+  },
   setRoomImageTtl: (room, hours) => ipcRenderer.invoke('rooms:setImageTtl', room, hours),
   onFileProgress: (cb) => {
     const listener = (_e: IpcRendererEvent, key: string, done: number, total: number): void => cb(key, done, total)
@@ -125,7 +135,7 @@ const api: ChatApi = {
   },
   getImage: (coreKey) => ipcRenderer.invoke('files:image', coreKey),
   getAudio: (coreKey) => ipcRenderer.invoke('files:audio', coreKey),
-  saveFile: (coreKey, name) => ipcRenderer.invoke('files:save', coreKey, name),
+  saveFile: (convId, coreKey, name) => ipcRenderer.invoke('files:save', convId, coreKey, name),
   voiceJoin: (room, chan) => ipcRenderer.invoke('voice:join', room, chan),
   voiceLeave: () => ipcRenderer.invoke('voice:leave'),
   voiceSignal: (to, room, chan, data) => ipcRenderer.invoke('voice:signal', to, room, chan, data),

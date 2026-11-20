@@ -20,7 +20,9 @@ export default defineConfig({
   renderer: {
     resolve: {
       alias: { '@': resolve('src/renderer/src') },
-      dedupe: ['react', 'react-dom'] // a single copy of React, no matter what
+      // A single copy of React and of i18next, no matter what. On Windows a build started from "c:\…" instead of
+      // "C:\…" (VS Code sometimes opens its terminal like that) bundled i18next twice: the UI showed raw keys.
+      dedupe: ['react', 'react-dom', 'i18next', 'react-i18next']
     },
     // Dependencies pre-optimized at startup: otherwise Vite discovers them along the way,
     // reloads the page, and may mix two copies of React

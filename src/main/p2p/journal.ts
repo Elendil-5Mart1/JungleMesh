@@ -6,7 +6,9 @@ const CALL_EVENTS: CallEvent[] = ['declined']
 
 export const MAX_MESSAGE_LENGTH = 4000
 export const MAX_AVATAR_LENGTH = 100_000 // ~75 KB of image: large for 128×128
-export const MAX_FILE_SIZE = 25 * 1024 * 1024 // a shared file (25 MB): it is stored by every recipient
+// No limit for a shared file (each recipient only downloads it on request, block by block). This one is for what
+// must fit in memory: an image shown in the chat, a sound for the player. Beyond it, it is a plain file to download.
+export const MAX_INLINE_SIZE = 25 * 1024 * 1024
 export const MAX_IMAGE_PIXELS = 40_000_000 // an image shown in the chat: refuses "decompression bombs"
 
 // What we write to a log. A missing `type` = message (format of the step-2 DMs).
@@ -29,6 +31,8 @@ export type JournalEntry =
   | { type: 'delete'; id: string; file?: string; ts: number } // the author deletes one of THEIR messages (tombstone)
   | { type: 'edit'; id: string; text: string; ts: number } // the author edits one of THEIR messages
   | { type: 'react'; id: string; to: string; emoji: string; on: boolean; ts: number } // reaction to the message `id` of `to`
+  | { type: 'received'; id: string; to: string; ts: number } // I saved the file of the message `id` of `to` (receipt)
+  | { type: 'file-gone'; id: string; ts: number } // the author freed the file of THEIR message `id`: no longer downloadable
 
 //& Shared file: the bytes live in a SEPARATE Hypercore (one block = 64 KB), the message only points to it
 export interface SharedFile {
@@ -41,6 +45,10 @@ export interface SharedFile {
 export const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 // Audio played in the chat (samples, demos…). Older versions see them as ordinary files.
 export const AUDIO_MIMES = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/flac', 'audio/mp4']
+
+// A plain file (neither an image shown in the chat nor a sound for the player): a transfer. Its sender frees
+// their copy once every recipient confirmed the download (see releaseDelivered in core.ts).
+export const isTransfer = (file: { mime: string }): boolean => !IMAGE_MIMES.includes(file.mime) && !AUDIO_MIMES.includes(file.mime)
 
 // File name: no path, no control or odd characters, never empty
 export const cleanFileName = (raw: unknown): string => {
@@ -63,14 +71,18 @@ export const cleanFileName = (raw: unknown): string => {
 export const cleanFile = (raw: unknown): SharedFile | undefined => {
   const f = raw as Partial<SharedFile> | null
   if (!f || typeof f.core !== 'string' || !/^[0-9a-f]{64}$/.test(f.core)) return undefined
-  if (!Number.isInteger(f.size) || (f.size as number) < 1 || (f.size as number) > MAX_FILE_SIZE) return undefined
-  const known = typeof f.mime === 'string' && (IMAGE_MIMES.includes(f.mime) || AUDIO_MIMES.includes(f.mime))
+  if (!Number.isSafeInteger(f.size) || (f.size as number) < 1) return undefined
+  const known =
+    typeof f.mime === 'string' &&
+    (IMAGE_MIMES.includes(f.mime) || AUDIO_MIMES.includes(f.mime)) &&
+    (f.size as number) <= MAX_INLINE_SIZE // a huge image or sound: offered for download, never loaded whole
   const mime = known ? (f.mime as string) : 'application/octet-stream'
   return { core: f.core, name: cleanFileName(f.name), size: f.size as number, mime }
 }
 
 // Files announced by messages we have seen (signed by their author): the only ones we agree to download
-export const knownFiles = new Map<string, SharedFile & { author: string }>()
+// (`id` = the message that carries it, for the receipt)
+export const knownFiles = new Map<string, SharedFile & { author: string; id: string }>()
 const MAX_KNOWN_FILES = 5000
 
 //& Avatar received from a peer: only a raster image in base64
@@ -171,7 +183,7 @@ export const toMessage = (raw: unknown, author: string): ChatMessage | null => {
   if (entry.file !== undefined && !file) return null // malformed attachment: the whole message is ignored
   if (file) {
     if (knownFiles.size >= MAX_KNOWN_FILES) knownFiles.delete(knownFiles.keys().next().value as string)
-    knownFiles.set(file.core, { ...file, author })
+    knownFiles.set(file.core, { ...file, author, id: entry.id.slice(0, 64) })
   }
   return {
     id: entry.id.slice(0, 64),
@@ -221,8 +233,8 @@ export const findOwnMessage = async (core: any, id: string): Promise<{ file?: st
   return null
 }
 
-//& Edits and reactions written by `author` (rules in shared/annotations.ts). Ignored by older versions,
-// which skip the unknown types: they simply show the original text, without reactions.
+//& Edits, reactions and file receipts written by `author` (rules in shared/annotations.ts). Ignored by older
+// versions, which skip the unknown types: they simply show the original text, without reactions.
 export const annotationsOf = (raws: unknown[], author: string): Annotation[] => {
   const out: Annotation[] = []
   for (const raw of raws) {
@@ -233,6 +245,10 @@ export const annotationsOf = (raws: unknown[], author: string): Annotation[] => 
       out.push({ kind: 'edit', id, by: author, text: e.text.slice(0, MAX_MESSAGE_LENGTH), ts: e.ts })
     } else if (e.type === 'react' && typeof e.to === 'string' && /^[0-9a-f]{64}$/.test(e.to) && isEmoji(e.emoji) && typeof e.on === 'boolean') {
       out.push({ kind: 'react', id, to: e.to, by: author, emoji: e.emoji, on: e.on, ts: e.ts })
+    } else if (e.type === 'received' && typeof e.to === 'string' && /^[0-9a-f]{64}$/.test(e.to)) {
+      out.push({ kind: 'received', id, to: e.to, by: author, ts: e.ts })
+    } else if (e.type === 'file-gone') {
+      out.push({ kind: 'gone', id, by: author, ts: e.ts })
     }
   }
   return out

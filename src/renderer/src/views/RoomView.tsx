@@ -423,6 +423,7 @@ export const RoomView = ({ roomKey }: { roomKey: string }) => {
           <>
             <MessageList
               key={channel.id} // another channel = a fresh list (scrolled to its bottom)
+              convId={roomKey}
               messages={byChannel[channel.id] ?? EMPTY}
               myKey={me?.publicKey}
               author={author}

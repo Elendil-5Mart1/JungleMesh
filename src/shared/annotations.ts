@@ -1,4 +1,5 @@
-//* Changes made to a message after it was sent: edit (by its author) and emoji reactions (by anyone)
+//* Changes made to a message after it was sent: edit (by its author), emoji reactions (by anyone),
+// and for a file: receipts (by its recipients) and "file gone" (by its author, once it freed its copy)
 // Each one is an entry in the log of the person who makes it (see journal.ts): the signature of that log
 // proves who reacted / who edited. The same rules run in the main process (history) and in the windows
 // (live updates), so they live here, shared by both.
@@ -7,6 +8,8 @@ import type { ChatMessage } from './types'
 export type Annotation =
   | { kind: 'edit'; id: string; by: string; text: string; ts: number }
   | { kind: 'react'; id: string; to: string; by: string; emoji: string; on: boolean; ts: number }
+  | { kind: 'received'; id: string; to: string; by: string; ts: number } // `by` saved the file of this message
+  | { kind: 'gone'; id: string; by: string; ts: number } // its author freed the file: it can no longer be downloaded
 
 export const MAX_REACTION_KINDS = 20 // different emojis on one message (anti-spam)
 
@@ -22,7 +25,12 @@ export const annotate = (m: ChatMessage, a: Annotation): ChatMessage => {
     if (m.from !== a.by || (m.edited ?? 0) > a.ts) return m
     return { ...m, text: a.text, edited: a.ts }
   }
-  if (m.from !== a.to) return m // the reaction targets the message of THIS author (ids alone could be forged)
+  if (a.kind === 'gone') return m.from === a.by && m.file && !m.file.gone ? { ...m, file: { ...m.file, gone: true } } : m
+  if (m.from !== a.to) return m // the reaction / receipt targets the message of THIS author (ids alone could be forged)
+  if (a.kind === 'received') {
+    if (!m.file || a.by === m.from || m.file.receivedBy?.includes(a.by)) return m
+    return { ...m, file: { ...m.file, receivedBy: [...(m.file.receivedBy ?? []), a.by] } }
+  }
   const who = m.reactions?.[a.emoji] ?? []
   if (a.on === who.includes(a.by)) return m
   if (a.on && who.length === 0 && Object.keys(m.reactions ?? {}).length >= MAX_REACTION_KINDS) return m

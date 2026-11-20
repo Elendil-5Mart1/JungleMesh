@@ -1,11 +1,10 @@
 //* Entry point of the Electron main process
 import { app, desktopCapturer, dialog, ipcMain, session, BrowserWindow } from 'electron'
-import { writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { AppSettings, Avatar, ChannelKind, ChatMessage, CoreState, ScreenSource, SoundKind } from '../shared/types'
 import { P2PCore } from './p2p/core'
-import { cleanFileName } from './p2p/journal'
+import { cleanFileName, MAX_INLINE_SIZE } from './p2p/journal'
 import { createNotifier, type ConvInfo } from './notifier'
 import { findInviteCode, SCHEME } from './inviteLink'
 import { createSettings } from './settings'
@@ -306,10 +305,16 @@ ipcMain.handle('chat:send', (_e, convId: string, text: string, channel?: string)
   core.send(asKey(convId), text, channel)
 )
 //& Files and images. The main process does the disk work: the page never sees a path.
-const MAX_FILE_SIZE = 25 * 1024 * 1024
-// Attachment staged in the input (picked, pasted or dropped), sent with the optional text of the message
+// Attachment staged in the input (picked, pasted or dropped), sent with the optional text of the message.
+// A file from the disk comes as its path, found by the preload from the File the user gave (the page never
+// sees it, and cannot make one up: see sendFile in the preload). Without a file on the disk (pasted picture),
+// the bytes themselves come, small (files.ts checks it).
+ipcMain.handle('files:sendPath', (_e, convId: string, name: string, path: unknown, channel?: string, text?: string) => {
+  if (typeof path !== 'string' || !path || !statSync(path, { throwIfNoEntry: false })?.isFile()) throw new Error(t('err.fileUnknown'))
+  return core.sendFilePath(asKey(convId), String(name), path, channel, typeof text === 'string' ? text : '')
+})
 ipcMain.handle('files:sendBytes', (_e, convId: string, name: string, bytes: unknown, channel?: string, text?: string) => {
-  if (!(bytes instanceof Uint8Array) || bytes.length > MAX_FILE_SIZE) throw new Error(t('err.fileTooBig', { max: MAX_FILE_SIZE / 1024 / 1024 }))
+  if (!(bytes instanceof Uint8Array)) throw new Error(t('err.fileTooBig', { max: MAX_INLINE_SIZE / 1024 / 1024 }))
   return core.sendFile(asKey(convId), String(name), Buffer.from(bytes), channel, typeof text === 'string' ? text : '')
 })
 ipcMain.handle('chat:delete', (_e, convId: string, id: string) => core.deleteMessage(asKey(convId), String(id).slice(0, 64)))
@@ -324,12 +329,15 @@ core.on('message-annotated', (convId, annotation) => broadcast('chat:annotated',
 ipcMain.handle('files:image', (_e, coreKey: string) => core.imageDataUrl(asKey(coreKey)))
 // "Download": the user chooses where to save; the file is never opened by the app
 // The transfer only starts AFTER the user accepted and chose the destination; progress goes back to the windows.
-ipcMain.handle('files:save', async (e, coreKey: string, name: string) => {
+// Once saved, a receipt goes into my log of `convId`: the sender can free their copy (see confirmReceived)
+ipcMain.handle('files:save', async (e, convId: string, coreKey: string, name: string) => {
   const key = asKey(coreKey)
+  const conv = asKey(convId)
   const parent = BrowserWindow.fromWebContents(e.sender) ?? undefined
   const { canceled, filePath } = await dialog.showSaveDialog(parent!, { defaultPath: cleanFileName(name) })
   if (canceled || !filePath) return false
-  await writeFile(filePath, await core.readFile(key))
+  await core.saveFile(key, filePath)
+  void core.confirmReceived(conv, key).catch((err) => console.error('receipt failed', err))
   void core.releaseFile(key) // the user's copy is the one that counts: we free the app's own storage
   return true
 })
@@ -561,8 +569,9 @@ app.whenReady().then(async () => {
   core.setStealth(settings.get().stealth)
   core.setImageTtl(settings.get().imageTtlHours)
   await core.start()
-  // Shared images that outlived their delay are erased from the disk: at startup, then every 30 minutes
-  const purge = (): void => void core.purgeExpiredImages().catch((err) => console.error('purge failed', err))
+  // Shared images that outlived their delay, and my files already delivered, are erased from the disk:
+  // at startup, then every 30 minutes
+  const purge = (): void => void core.purgeFiles().catch((err) => console.error('purge failed', err))
   setTimeout(purge, 20_000)
   setInterval(purge, 30 * 60_000)
   notifier.onState(core.getState(), true) // requests already present: no notification

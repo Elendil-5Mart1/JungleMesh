@@ -25,6 +25,7 @@ export interface Author {
 }
 
 interface MessageListProps {
+  convId: string // friend or room: where the receipt of a saved file goes
   messages: ChatMessage[]
   myKey?: string
   author: (key: string) => Author
@@ -87,10 +88,11 @@ interface RowProps {
   reactable: boolean
   editing: boolean
   ttlHours: number
+  convId: string
   actions: RowActions
 }
 
-const MessageRow = memo(({ m, grouped, name, avatar, mine, myKey, deletable, editable, reactable, editing, ttlHours, actions }: RowProps) => {
+const MessageRow = memo(({ m, grouped, name, avatar, mine, myKey, deletable, editable, reactable, editing, ttlHours, convId, actions }: RowProps) => {
   const { t } = useTranslation()
 
   // Call event (DM): phone pictogram + "X declined the call", with the time
@@ -145,7 +147,7 @@ const MessageRow = memo(({ m, grouped, name, avatar, mine, myKey, deletable, edi
           </span>
         )}
         {m.text && !editing && <Embeds text={m.text} />}
-        {m.file && <FileCard file={m.file} ts={m.ts} ttlHours={ttlHours} />}
+        {m.file && <FileCard file={m.file} ts={m.ts} ttlHours={ttlHours} convId={convId} mine={mine} />}
         {reactions.length > 0 && (
           <div className="reactions">
             {reactions.map(([emoji, who]) => (
@@ -205,7 +207,7 @@ const MessageRow = memo(({ m, grouped, name, avatar, mine, myKey, deletable, edi
   )
 })
 
-export const MessageList = ({ messages, myKey, author, empty, imageTtlHours = 0, onDelete, onEdit, onReact }: MessageListProps) => {
+export const MessageList = ({ convId, messages, myKey, author, empty, imageTtlHours = 0, onDelete, onEdit, onReact }: MessageListProps) => {
   const { t } = useTranslation()
   const listRef = useRef<HTMLElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -302,6 +304,7 @@ export const MessageList = ({ messages, myKey, author, empty, imageTtlHours = 0,
             reactable={!!onReact && !!myKey}
             editing={editingId === m.id}
             ttlHours={imageTtlHours}
+            convId={convId}
             actions={actions}
           />
         )

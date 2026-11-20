@@ -27,6 +27,8 @@ import {
   MAX_MESSAGE_LENGTH,
   deletedIds,
   findOwnMessage,
+  isTransfer,
+  knownFiles,
   messagesOf,
   orphanFiles,
   annotationsOf,
@@ -65,6 +67,7 @@ interface Peer {
 const PROTOCOL = 'junglemesh/control/v1'
 const MAX_CONTROL_SIZE = 300_000 // bytes: a Hello with an avatar is about 100 KB, a voice signal < 20 KB
 const FLOOD_LIMIT = 600 // control messages per 10 s window beyond which the peer is cut off
+const FILE_KEEP_DAYS = 7 // a file not downloaded by everyone is freed by its sender after this delay anyway
 
 // c.json, but refuses to decode an oversized message (otherwise a peer could make us allocate 16 MB for the string)
 const boundedJson = {
@@ -172,7 +175,7 @@ export class P2PCore extends EventEmitter {
       },
       message: (roomKey, msg) => this.emit('message', roomKey, msg),
       messageDeleted: (roomKey, id, author) => this.deleted(roomKey, id, author),
-      messageAnnotated: (roomKey, a) => this.emit('message-annotated', roomKey, a)
+      messageAnnotated: (roomKey, a) => this.annotated(roomKey, a)
     })
     this.voice = new VoiceManager({
       members: (room) => this.voiceMembers(room),
@@ -563,6 +566,14 @@ export class P2PCore extends EventEmitter {
     await core.append({ type: 'react', id, to, emoji, on, ts: Date.now() } satisfies JournalEntry)
   }
 
+  // An edit, a reaction or a receipt: to the windows. A receipt for one of MY files may free my copy.
+  private annotated(convId: string, a: Annotation): void {
+    this.emit('message-annotated', convId, a)
+    if (a.kind === 'received' && a.to === this.publicKey) {
+      void this.releaseDelivered(convId).catch((err) => console.error('release failed', err))
+    }
+  }
+
   // A message was deleted by its author: the windows hide it, and its image (if any) is freed from the disk
   private deleted(convId: string, id: string, author: string): void {
     this.emit('message-deleted', convId, id, author)
@@ -582,8 +593,50 @@ export class P2PCore extends EventEmitter {
     await this.send(convId, text, channel, file)
   }
 
-  readFile(coreKey: string): Promise<Buffer> {
-    return this.files.read(coreKey)
+  // A file from the disk, any size (copied block by block into its log)
+  async sendFilePath(convId: string, fileName: string, path: string, channel?: string, text = ''): Promise<void> {
+    const file = await this.files.publishPath(cleanFileName(fileName), path)
+    await this.send(convId, text, channel, file)
+  }
+
+  saveFile(coreKey: string, filePath: string): Promise<void> {
+    return this.files.saveTo(coreKey, filePath)
+  }
+
+  //& Transfers: a plain file is not kept forever by its sender (a 10 GB file = 10 GB more on their disk).
+  // 1. The recipient saved it → a 'received' entry in THEIR log (signed: nobody can confirm for someone else).
+  // 2. Every recipient confirmed (in a room: the members signed up before the file was sent), or FILE_KEEP_DAYS
+  //    went by → the sender frees the blocks and writes 'file-gone': the cards say "no longer available".
+  async confirmReceived(convId: string, coreKey: string): Promise<void> {
+    const info = knownFiles.get(coreKey)
+    if (!info || info.author === this.publicKey || !isTransfer(info)) return
+    const entry = { type: 'received', id: info.id, to: info.author, ts: Date.now() } satisfies JournalEntry
+    if (this.rooms.has(convId)) return this.rooms.appendOwn(convId, entry)
+    if (convId !== info.author || this.contacts.get(convId)?.status !== 'accepted') return // a DM file comes from that friend
+    await this.myCores.get(convId)?.append(entry)
+  }
+
+  private releasing = new Set<string>() // file logs being freed (a receipt and the periodic sweep can meet)
+  async releaseDelivered(convId: string): Promise<void> {
+    const room = this.rooms.has(convId)
+    if (!room && this.contacts.get(convId)?.status !== 'accepted') return
+    const now = Date.now()
+    for (const msg of await this.getHistory(convId)) {
+      const file = msg.file
+      if (msg.from !== this.publicKey || !file || file.gone || !isTransfer(file) || this.releasing.has(file.core)) continue
+      const recipients = room ? this.rooms.recipients(convId, msg.ts, this.publicKey) : [convId]
+      const delivered = recipients.length > 0 && recipients.every((key) => file.receivedBy?.includes(key))
+      if (!delivered && now - Math.min(msg.ts, now) < FILE_KEEP_DAYS * 86_400_000) continue
+      this.releasing.add(file.core)
+      try {
+        await this.files.release(file.core)
+        const entry = { type: 'file-gone', id: msg.id, ts: now } satisfies JournalEntry
+        if (room) await this.rooms.appendOwn(convId, entry)
+        else await this.myCores.get(convId)?.append(entry)
+      } finally {
+        this.releasing.delete(file.core)
+      }
+    }
   }
 
   imageDataUrl(coreKey: string): Promise<string> {
@@ -607,8 +660,9 @@ export class P2PCore extends EventEmitter {
     this.imageTtlHours = hours
   }
 
-  // Frees the blocks of the images that have outlived their delay (the windows hide them by the same rule)
-  async purgeExpiredImages(): Promise<void> {
+  // Frees the blocks of the images that have outlived their delay (the windows hide them by the same rule),
+  // and my copy of the files already delivered (or kept FILE_KEEP_DAYS: a recipient may never download them)
+  async purgeFiles(): Promise<void> {
     const now = Date.now()
     await this.flushOrphans() // images of messages deleted while we were away
     const sweep = async (convId: string, hours: number): Promise<void> => {
@@ -617,9 +671,15 @@ export class P2PCore extends EventEmitter {
         if (msg.file?.image && now - Math.min(msg.ts, now) > hours * 3_600_000) await this.files.release(msg.file.core)
       }
     }
-    for (const c of this.contacts.values()) if (c.status === 'accepted') await sweep(c.key, this.imageTtlHours)
+    for (const c of this.contacts.values()) {
+      if (c.status !== 'accepted') continue
+      await sweep(c.key, this.imageTtlHours)
+      await this.releaseDelivered(c.key)
+    }
     for (const r of this.rooms.getState()) {
-      if (r.status === 'joined') await sweep(r.key, r.imageTtl ?? this.imageTtlHours)
+      if (r.status !== 'joined') continue
+      await sweep(r.key, r.imageTtl ?? this.imageTtlHours)
+      await this.releaseDelivered(r.key)
     }
   }
 
@@ -780,7 +840,7 @@ export class P2PCore extends EventEmitter {
       const raws = await readRaw(core, from) // read once, used for the messages AND the deletions
       for (const msg of messagesOf(raws, author)) this.emit('message', friendKey, msg)
       for (const id of deletedIds(raws, author)) this.deleted(friendKey, id, author)
-      for (const a of annotationsOf(raws, author)) this.emit('message-annotated', friendKey, a)
+      for (const a of annotationsOf(raws, author)) this.annotated(friendKey, a)
     })
   }
 

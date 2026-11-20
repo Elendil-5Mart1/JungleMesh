@@ -3,14 +3,18 @@
 // Why a separate log: the conversation log stays small and fast to replicate, and a recipient only
 // downloads the bytes when they are needed (an image being displayed, or a click on "Download").
 // The same Corestore connection already replicates every log both sides have open: nothing else to set up.
+// No size limit: a file from the disk is copied into its log block by block, and a download is written to the
+// user's file the same way, so the whole file is never in memory. Only what must be in memory (an image shown
+// in the chat, a sound for the player) stays under MAX_INLINE_SIZE (see cleanFile in journal.ts).
 import { randomUUID } from 'node:crypto'
+import { open, rm } from 'node:fs/promises'
 import b4a from 'b4a'
 import { t } from '../../shared/i18n'
 import {
   AUDIO_MIMES,
   IMAGE_MIMES,
-  MAX_FILE_SIZE,
   MAX_IMAGE_PIXELS,
+  MAX_INLINE_SIZE,
   imageSize,
   knownFiles,
   type SharedFile
@@ -18,6 +22,8 @@ import {
 
 const CHUNK = 64 * 1024
 const FETCH_TIMEOUT = 30_000 // ms to receive the first block (the sender may be offline)
+const APPEND_BATCH = 16 // blocks written to the log at once (1 MB) when copying a file from the disk
+const PROGRESS_STEPS = 200 // progress reports per transfer at most (one per block would flood the windows)
 
 // What the bytes really are, from their first bytes (the declared type is never trusted)
 const sniffMime = (bytes: Buffer): string | null => {
@@ -50,23 +56,68 @@ export class FileManager {
 
   // Sender: stores the bytes in a new log and returns what the message must carry
   // `name` must already be cleaned (cleanFileName)
+  // Bytes already in memory (an image pasted from the clipboard has no file on the disk): small by nature
   async publish(name: string, data: Buffer): Promise<SharedFile> {
-    if (data.length < 1) throw new Error(t('err.fileEmpty'))
-    if (data.length > MAX_FILE_SIZE) throw new Error(t('err.fileTooBig', { max: MAX_FILE_SIZE / 1024 / 1024 }))
-    const core = this.store.get({ name: `file:${randomUUID()}`, valueEncoding: 'binary' })
-    await core.ready()
-    const blocks: Buffer[] = []
-    for (let i = 0; i < data.length; i += CHUNK) blocks.push(data.subarray(i, i + CHUNK))
-    await core.append(blocks)
-    const mime = sniffMime(data) ?? 'application/octet-stream'
-    return { core: b4a.toString(core.key, 'hex'), name, size: data.length, mime }
+    if (data.length > MAX_INLINE_SIZE) throw new Error(t('err.fileTooBig', { max: MAX_INLINE_SIZE / 1024 / 1024 }))
+    async function* chunks(): AsyncGenerator<Buffer> {
+      for (let i = 0; i < data.length; i += CHUNK) yield data.subarray(i, i + CHUNK)
+    }
+    return this.publishBlocks(name, chunks())
   }
 
-  // Reads all the bytes of a file announced by a message (the progress is reported block by block).
+  // A file from the disk, any size: read block by block, never whole
+  async publishPath(name: string, path: string): Promise<SharedFile> {
+    const handle = await open(path, 'r')
+    async function* chunks(): AsyncGenerator<Buffer> {
+      for (;;) {
+        // A block is always full (except the last one): the receiver checks the count of blocks against the size
+        const block = Buffer.alloc(CHUNK)
+        let filled = 0
+        while (filled < CHUNK) {
+          const { bytesRead } = await handle.read(block, filled, CHUNK - filled, null)
+          if (bytesRead === 0) break
+          filled += bytesRead
+        }
+        if (filled > 0) yield block.subarray(0, filled)
+        if (filled < CHUNK) return
+      }
+    }
+    try {
+      return await this.publishBlocks(name, chunks())
+    } finally {
+      await handle.close()
+    }
+  }
+
+  private async publishBlocks(name: string, chunks: AsyncIterable<Buffer>): Promise<SharedFile> {
+    const core = this.store.get({ name: `file:${randomUUID()}`, valueEncoding: 'binary' })
+    await core.ready()
+    let size = 0
+    let mime: string | null = null
+    let batch: Buffer[] = []
+    for await (const block of chunks) {
+      if (size === 0) mime = sniffMime(block) // the first block is enough to recognize the format
+      size += block.length
+      batch.push(block)
+      if (batch.length === APPEND_BATCH) {
+        await core.append(batch)
+        batch = []
+      }
+    }
+    if (batch.length > 0) await core.append(batch)
+    if (size < 1) {
+      await core.close().catch(() => {})
+      throw new Error(t('err.fileEmpty'))
+    }
+    return { core: b4a.toString(core.key, 'hex'), name, size, mime: mime ?? 'application/octet-stream' }
+  }
+
+  // Reads all the bytes of an image or a sound announced by a message (the only ones under MAX_INLINE_SIZE).
   // Only images are kept in memory afterwards: they are displayed again and again.
-  read(coreKey: string): Promise<Buffer> {
+  private read(coreKey: string): Promise<Buffer> {
     const info = knownFiles.get(coreKey)
     if (!info) return Promise.reject(new Error(t('err.fileUnknown')))
+    if (info.size > MAX_INLINE_SIZE) return Promise.reject(new Error(t('err.fileUnavailable')))
     if (!IMAGE_MIMES.includes(info.mime)) return this.fetch(info)
     let pending = this.cache.get(coreKey)
     if (!pending) {
@@ -78,6 +129,28 @@ export class FileManager {
   }
 
   private async fetch(info: SharedFile): Promise<Buffer> {
+    const parts: Buffer[] = []
+    for await (const block of this.blocks(info)) parts.push(block)
+    return Buffer.concat(parts)
+  }
+
+  // "Download": the blocks go straight into the user's file, any size (a failed transfer leaves no half file)
+  async saveTo(coreKey: string, filePath: string): Promise<void> {
+    const info = knownFiles.get(coreKey)
+    if (!info) throw new Error(t('err.fileUnknown'))
+    const handle = await open(filePath, 'w')
+    try {
+      for await (const block of this.blocks(info)) await handle.write(block)
+      await handle.close()
+    } catch (err) {
+      await handle.close().catch(() => {})
+      await rm(filePath, { force: true }).catch(() => {})
+      throw err
+    }
+  }
+
+  // The blocks of a file, in order, checked against what the message announced (the progress is reported on the way)
+  private async *blocks(info: SharedFile): AsyncGenerator<Buffer> {
     const core = this.store.get({ key: b4a.from(info.core, 'hex'), valueEncoding: 'binary' })
     await core.ready()
     const expected = Math.ceil(info.size / CHUNK)
@@ -91,17 +164,25 @@ export class FileManager {
     }
     if (core.length !== expected) throw new Error(t('err.fileCorrupt')) // longer than declared: refused
 
-    const parts: Buffer[] = []
+    // All the blocks are requested at once: asking them one by one would wait a network round trip per 64 KB
+    const range = core.download({ start: 0, end: expected })
+    const step = Math.max(1, Math.floor(expected / PROGRESS_STEPS))
     let total = 0
-    for (let i = 0; i < expected; i++) {
-      const block: Buffer = await core.get(i, { timeout: FETCH_TIMEOUT })
-      total += block.length
-      if (total > info.size || block.length > CHUNK) throw new Error(t('err.fileCorrupt'))
-      parts.push(block)
-      this.onProgress(info.core, i + 1, expected)
+    try {
+      for (let i = 0; i < expected; i++) {
+        // A block that never comes (sender gone offline, or the file was freed): the usual message, not Hypercore's
+        const block: Buffer = await core.get(i, { timeout: FETCH_TIMEOUT }).catch(() => {
+          throw new Error(t('err.fileUnavailable'))
+        })
+        total += block.length
+        if (total > info.size || block.length > CHUNK) throw new Error(t('err.fileCorrupt'))
+        if ((i + 1) % step === 0 || i + 1 === expected) this.onProgress(info.core, i + 1, expected)
+        yield block
+      }
+    } finally {
+      range.destroy()
     }
     if (total !== info.size) throw new Error(t('err.fileCorrupt'))
-    return Buffer.concat(parts)
   }
 
   // A RECEIVED file whose bytes now live elsewhere (saved by the user, or read by the player): its blocks are

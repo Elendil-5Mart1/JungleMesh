@@ -68,7 +68,8 @@ export interface ChatMessage {
   text: string // raw markdown, interpreted at display time
   ts: number
   channel?: string // channel of a room ('general' if missing)
-  file?: { core: string; name: string; size: number; mime: string; image: boolean } // attachment (image or other file)
+  // Attachment (image or other file). receivedBy = recipients who saved it, gone = its sender freed it (plain files)
+  file?: { core: string; name: string; size: number; mime: string; image: boolean; receivedBy?: string[]; gone?: boolean }
   system?: boolean // informational message ("X joined the room"), not written by a human
   call?: CallEvent // DM call event (system line, its text is built by the window with the author's name)
   edited?: number // date of the last edit by its author (missing = never edited)
@@ -167,7 +168,7 @@ export interface ChatApi {
   deleteChannel: (roomKey: string, channelId: string) => Promise<void>
   kickFromRoom: (roomKey: string, memberKey: string) => Promise<void>
   leaveRoom: (roomKey: string) => Promise<void>
-  sendFileBytes: (convId: string, name: string, bytes: Uint8Array, channel?: string, text?: string) => Promise<void>
+  sendFile: (convId: string, file: File, channel?: string, text?: string) => Promise<void> // any size from the disk
   deleteMessage: (convId: string, id: string) => Promise<void>
   onMessageDeleted: (cb: (convId: string, id: string, author: string) => void) => () => void
   editMessage: (convId: string, id: string, text: string) => Promise<void> // one of MY messages
@@ -175,7 +176,7 @@ export interface ChatApi {
   onMessageAnnotated: (cb: (convId: string, annotation: Annotation) => void) => () => void
   getImage: (coreKey: string) => Promise<string>
   getAudio: (coreKey: string) => Promise<{ mime: string; bytes: Uint8Array }> // shared audio file, for the player
-  saveFile: (coreKey: string, name: string) => Promise<boolean>
+  saveFile: (convId: string, coreKey: string, name: string) => Promise<boolean> // convId: where the receipt goes
   setRoomImageTtl: (roomKey: string, hours: number | null) => Promise<void>
   onFileProgress: (cb: (coreKey: string, done: number, total: number) => void) => () => void
   deleteRoom: (roomKey: string) => Promise<void>
