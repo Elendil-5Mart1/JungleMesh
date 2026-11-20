@@ -1,19 +1,16 @@
-//* Message list shared by the DM and room screens (text only for now)
-// Mobile counterpart of src/renderer/src/components/MessageList.tsx. Markdown, files, reactions
-// and editing come later: the text is shown as is.
+//* Message list shared by the DM and room screens
+// Mobile counterpart of src/renderer/src/components/MessageList.tsx. Files, reactions
+// and editing come later: an attachment is shown as "📎 name".
 import { useMemo } from 'react'
 import { FlatList, StyleSheet, Text, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '../../../src/shared/types'
+import { Markdown } from './Markdown'
 import { colors, space } from '../theme'
 
 const GROUP_MS = 5 * 60_000 // consecutive messages of the same author within 5 min share one header
 
 const time = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
-// System lines are written in Markdown ("**Alice** joined the room"): without a Markdown renderer
-// yet, the bold markers are simply removed
-const plain = (text: string) => text.replace(/\*\*/g, '')
 
 //& One message
 interface BubbleProps {
@@ -29,7 +26,8 @@ const Bubble = ({ msg, author, mine, header }: BubbleProps) => {
   // Call event written in the history (only "declined" for now): a system line
   if (msg.call) return <Text style={styles.system}>{t('call.declined', { name: author })}</Text>
   // System message of a room ("X joined the room"): a discreet, centered line
-  if (msg.system) return <Text style={styles.system}>{plain(msg.text)}</Text>
+  // (written in Markdown: "**Alice** joined the room")
+  if (msg.system) return <Markdown text={msg.text} style={styles.system} />
 
   return (
     <View style={[styles.message, header && styles.messageFirst]}>
@@ -40,10 +38,9 @@ const Bubble = ({ msg, author, mine, header }: BubbleProps) => {
           {time(msg.ts)}
         </Text>
       )}
-      <Text style={styles.text} selectable>
-        {msg.file ? `📎 ${msg.file.name}${msg.text ? `\n${msg.text}` : ''}` : msg.text}
-        {msg.edited ? <Text style={styles.edited}> {t('message.edited')}</Text> : null}
-      </Text>
+      {!!msg.file && <Text style={styles.text}>📎 {msg.file.name}</Text>}
+      {!!msg.text && <Markdown text={msg.text} style={styles.text} />}
+      {!!msg.edited && <Text style={styles.edited}>{t('message.edited')}</Text>}
     </View>
   )
 }

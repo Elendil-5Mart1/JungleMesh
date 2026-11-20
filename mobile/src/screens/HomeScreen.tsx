@@ -1,78 +1,169 @@
-//* Home screen: my profile, my invite code, friends and friend requests
-// Mobile counterpart of src/renderer/src/views/HomeView.tsx, reusing its texts (home.*).
+//* Home screen: profile, pending requests/invitations, rooms and friends
+// Mobile counterpart of src/renderer/src/views/HomeView.tsx (same layout, same texts home.*).
+// Differences for a phone: the "+" buttons are real buttons (bigger touch target), and the
+// invite code with its Copy/Share buttons lives in the settings screen (gear).
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Clipboard from 'expo-clipboard'
 import { router } from 'expo-router'
 import { Trans, useTranslation } from 'react-i18next'
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg'
 import type { Friend, Room } from '../../../src/shared/types'
 import { call } from '../bridge'
+import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
+import { Icon } from '../components/Icon'
 import { useCore } from '../store'
 import { colors, fonts, radius, space } from '../theme'
 
-//& One line of the friends list
-const FriendRow = ({ friend }: { friend: Friend }) => {
-  const { t } = useTranslation()
-  const dot = friend.online ? colors.accent : colors.textDim
-
-  // An accepted friend opens the conversation; a request stays a plain line with its buttons
-  const open = friend.status === 'accepted' ? () => router.push({ pathname: '/chat/[key]', params: { key: friend.key } }) : undefined
-
-  return (
-    <Pressable style={({ pressed }) => [styles.friend, pressed && !!open && styles.friendPressed]} onPress={open} disabled={!open}>
-      <View style={[styles.dot, { backgroundColor: dot }]} />
-      <View style={styles.friendBody}>
-        {friend.status === 'incoming' ? (
-          <Text style={styles.friendName}>
-            <Trans i18nKey="home.wantsToAdd" values={{ name: friend.name }} components={{ strong: <Text style={styles.strong} /> }} />
-          </Text>
-        ) : (
-          <Text style={styles.friendName}>{friend.name}</Text>
-        )}
-        {friend.status === 'outgoing' && <Text style={styles.muted}>{t('home.pending')}</Text>}
-      </View>
-      {friend.status === 'incoming' && (
-        <View style={styles.row}>
-          <Button label={t('home.accept')} kind="primary" onPress={() => call('acceptRequest', friend.key)} />
-          <Button label={t('home.decline')} kind="danger" onPress={() => call('declineRequest', friend.key)} />
-        </View>
-      )}
-    </Pressable>
-  )
-}
-
-//& One line of the rooms list (joined or being joined)
 const openRoom = (key: string) => router.push({ pathname: '/room/[key]', params: { key } })
+const openChat = (key: string) => router.push({ pathname: '/chat/[key]', params: { key } })
 
-const RoomRow = ({ room }: { room: Room }) => {
+//& My name: plain text with a pencil next to it; a field only while editing (like the desktop)
+const NameEditor = ({ name }: { name: string }) => {
   const { t } = useTranslation()
-  return (
-    <Pressable style={({ pressed }) => [styles.friend, pressed && styles.friendPressed]} onPress={() => openRoom(room.key)}>
-      <Text style={styles.hash}>#</Text>
-      <View style={styles.friendBody}>
-        <Text style={styles.friendName}>{room.name}</Text>
-        {room.status === 'joining' && <Text style={styles.muted}>{t('home.joining')}</Text>}
+  const [editing, setEditing] = useState(false)
+
+  if (!editing) {
+    return (
+      <View style={styles.nameRow}>
+        <Text style={styles.name} numberOfLines={1} onLongPress={() => setEditing(true)}>
+          {name}
+        </Text>
+        <Pressable onPress={() => setEditing(true)} hitSlop={10} accessibilityLabel={t('home.nameHint')}>
+          <Icon name="pencil" size={16} color={colors.textMuted} />
+        </Pressable>
       </View>
-    </Pressable>
+    )
+  }
+
+  const save = (value: string) => {
+    setEditing(false)
+    const clean = value.trim()
+    if (clean && clean !== name) void call('setName', clean)
+  }
+
+  return (
+    <TextInput
+      style={[styles.name, styles.nameEditing]}
+      defaultValue={name}
+      maxLength={32}
+      autoFocus
+      selectTextOnFocus
+      returnKeyType="done"
+      onEndEditing={(e) => save(e.nativeEvent.text)}
+    />
   )
 }
+
+//& Turquoise line that fades out under the profile (signature of the theme, border-image on the desktop)
+const AccentLine = () => (
+  <Svg height={1} width="100%">
+    <Defs>
+      <LinearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+        <Stop offset="0" stopColor={colors.accent} stopOpacity={0.55} />
+        <Stop offset="0.75" stopColor={colors.accent} stopOpacity={0} />
+      </LinearGradient>
+    </Defs>
+    <Rect width="100%" height={1} fill="url(#line)" />
+  </Svg>
+)
+
+//& Section title "// ROOMS" with its "+" button
+interface SectionTitleProps {
+  label: string
+  open?: boolean // form shown: the "+" becomes a "×"
+  onToggle?: () => void
+  addLabel?: string // accessibility label of the "+"
+}
+
+const SectionTitle = ({ label, open, onToggle, addLabel }: SectionTitleProps) => (
+  <View style={styles.sectionTitle}>
+    <Text style={styles.label}>//{label}</Text>
+    {onToggle && (
+      <Pressable
+        onPress={onToggle}
+        accessibilityLabel={addLabel}
+        hitSlop={6}
+        style={({ pressed }) => [styles.add, open && styles.addOpen, pressed && styles.pressed]}
+      >
+        <Icon name={open ? 'close' : 'plus'} size={22} color={open ? colors.onAccent : colors.accent} />
+      </Pressable>
+    )}
+  </View>
+)
+
+//& Inline form under a section title (create a room, add a friend)
+interface InlineFormProps {
+  placeholder: string
+  submitLabel: string
+  onSubmit: (value: string) => Promise<void>
+  code?: boolean // invite code: no capitals or corrections
+}
+
+const InlineForm = ({ placeholder, submitLabel, onSubmit, code }: InlineFormProps) => {
+  const [value, setValue] = useState('')
+  const submit = () => {
+    if (value.trim()) void onSubmit(value.trim()).then(() => setValue(''))
+  }
+  return (
+    <View style={styles.form}>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={setValue}
+        onSubmitEditing={submit}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textDim}
+        autoFocus
+        autoCapitalize={code ? 'none' : 'sentences'}
+        autoCorrect={!code}
+        maxLength={code ? undefined : 64}
+        returnKeyType="done"
+      />
+      <Button label={submitLabel} kind="primary" onPress={submit} disabled={!value.trim()} />
+    </View>
+  )
+}
+
+//& One line of a list (room or friend)
+interface RowProps {
+  avatar: React.ReactNode
+  name: string
+  note?: string // "joining…", "pending"
+  onPress?: () => void
+}
+
+const Row = ({ avatar, name, note, onPress }: RowProps) => (
+  <Pressable
+    style={({ pressed }) => [styles.item, pressed && !!onPress && styles.itemPressed]}
+    onPress={onPress}
+    disabled={!onPress}
+  >
+    {avatar}
+    <Text style={[styles.itemName, !onPress && styles.muted]} numberOfLines={1}>
+      {name}
+    </Text>
+    {!!note && <Text style={styles.note}>{note}</Text>}
+  </Pressable>
+)
 
 //& Screen
 export const HomeScreen = () => {
   const { t } = useTranslation()
   const state = useCore((s) => s.state)
   const bootError = useCore((s) => s.error)
-  const [name, setName] = useState('')
-  const [code, setCode] = useState('')
-  const [roomName, setRoomName] = useState('')
+  const [adding, setAdding] = useState<'friend' | 'room' | null>(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
 
-  // The name field follows the core (but not while the user is typing in it)
-  const savedName = state?.me.named ? state.me.name : ''
-  useEffect(() => setName(savedName), [savedName])
+  // The "copied" mention disappears by itself
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 1500)
+    return () => clearTimeout(timer)
+  }, [copied])
 
   if (bootError) {
     return (
@@ -92,145 +183,158 @@ export const HomeScreen = () => {
   }
 
   const { me, friends, rooms } = state
-  const invites = rooms.filter((r) => r.status === 'invited')
-  const myRooms = rooms.filter((r) => r.status !== 'invited')
-  const link = `junglemesh://add/${me.inviteCode}`
+  const requests = friends.filter((f: Friend) => f.status === 'incoming')
+  const contacts = friends.filter((f: Friend) => f.status !== 'incoming')
+  const invites = rooms.filter((r: Room) => r.status === 'invited')
+  const myRooms = rooms.filter((r: Room) => r.status !== 'invited')
 
-  // Runs a core call and shows its error under the form (invalid code, own code…)
+  // Runs a core call and shows its error (invalid code, own code…); rethrows so a form keeps its text
   const run = async (action: () => Promise<unknown>) => {
     setError('')
     try {
       await action()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      throw err
     }
   }
 
-  const saveName = () => {
-    const clean = name.trim()
-    if (clean && clean !== me.name) void run(() => call('setName', clean))
+  const toggle = (form: 'friend' | 'room') => {
+    setError('')
+    setAdding((current) => (current === form ? null : form))
   }
 
-  const copyCode = async () => {
-    await Clipboard.setStringAsync(me.inviteCode)
+  const copyLink = async () => {
+    await Clipboard.setStringAsync(`junglemesh://add/${me.inviteCode}`)
     setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
   }
 
-  const addFriend = () => {
-    if (!code.trim()) return
-    void run(async () => {
+  const createRoom = (name: string) =>
+    run(async () => {
+      const key = await call<string>('createRoom', name)
+      setAdding(null)
+      openRoom(key) // created then opened, as on the desktop
+    })
+
+  const addFriend = (code: string) =>
+    run(async () => {
       await call('addFriend', code)
-      setCode('')
+      setAdding(null)
     })
-  }
 
-  // Created then opened, as on the desktop
-  const createRoom = () => {
-    const clean = roomName.trim()
-    if (!clean) return
-    void run(async () => {
-      const key = await call<string>('createRoom', clean)
-      setRoomName('')
-      openRoom(key)
-    })
-  }
-
-  const joinRoom = (key: string) =>
-    void run(async () => {
-      await call('acceptRoomInvite', key)
-      openRoom(key)
-    })
+  const ignore = (p: Promise<unknown>) => void p.catch(() => {}) // the error is already shown
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>JungleMesh</Text>
-
-        {/* Profile */}
-        <Text style={styles.label}>{t('settings.name')}</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          onEndEditing={saveName}
-          placeholder={t('welcome.namePlaceholder')}
-          placeholderTextColor={colors.textDim}
-          maxLength={32}
-          returnKeyType="done"
-        />
-
-        {/* Invite code */}
-        <Text style={styles.label}>{t('settings.inviteCode')}</Text>
-        <Text style={styles.code} selectable>
-          {me.inviteCode}
-        </Text>
-        <Text style={styles.hint}>{t('settings.inviteCodeHint')}</Text>
-        <View style={styles.row}>
-          <Button label={copied ? t('settings.copied') : t('settings.copy')} onPress={copyCode} />
-          <Button label={t('settings.share')} onPress={() => Share.share({ message: link })} />
+    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+      {/*& Profile */}
+      <View style={styles.profile}>
+        <Avatar src={me.avatar} name={me.name} size={56} cutout={colors.bgDeep} />
+        <View style={styles.identity}>
+          <NameEditor name={me.name} />
+          <Pressable onPress={copyLink} hitSlop={6}>
+            <Text style={styles.key}>{copied ? t('home.linkCopied') : t('home.copyLink')}</Text>
+          </Pressable>
         </View>
+        <Pressable
+          onPress={() => router.push('/settings')}
+          accessibilityLabel={t('home.settings')}
+          hitSlop={6}
+          style={({ pressed }) => [styles.gear, pressed && styles.pressed]}
+        >
+          <Icon name="settings" size={26} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      <AccentLine />
 
-        {/* Add a friend */}
-        <Text style={styles.label}>{t('home.addFriend')}</Text>
-        <TextInput
-          style={styles.input}
-          value={code}
-          onChangeText={setCode}
-          onSubmitEditing={addFriend}
-          placeholder={t('home.friendCode')}
-          placeholderTextColor={colors.textDim}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Button label={t('home.sendRequest')} kind="primary" onPress={addFriend} disabled={!code.trim()} />
+      <ScrollView contentContainerStyle={styles.lists} keyboardShouldPersistTaps="handled">
         {!!error && <Text style={styles.error}>{error}</Text>}
 
-        {/* Room invitations */}
-        {invites.map((r) => (
-          <View key={r.key} style={styles.invite}>
-            <Text style={styles.friendName}>
-              <Trans
-                i18nKey="home.invitesYou"
-                values={{ who: r.invitedBy, room: r.name }}
-                components={{ strong: <Text style={styles.strong} /> }}
-              />
-            </Text>
-            <View style={styles.row}>
-              <Button label={t('home.join')} kind="primary" onPress={() => joinRoom(r.key)} />
-              <Button label={t('home.decline')} kind="danger" onPress={() => void run(() => call('declineRoomInvite', r.key))} />
-            </View>
+        {/*& Friend requests and room invitations */}
+        {(requests.length > 0 || invites.length > 0) && (
+          <View style={styles.section}>
+            <SectionTitle label={t('home.waiting')} />
+            {requests.map((f) => (
+              <View key={f.key} style={styles.request}>
+                <Text style={styles.requestText}>
+                  <Trans i18nKey="home.wantsToAdd" values={{ name: f.name }} components={{ strong: <Text style={styles.strong} /> }} />
+                </Text>
+                <View style={styles.buttons}>
+                  <Button label={t('home.accept')} kind="primary" onPress={() => ignore(run(() => call('acceptRequest', f.key)))} />
+                  <Button label={t('home.decline')} kind="danger" onPress={() => ignore(run(() => call('declineRequest', f.key)))} />
+                </View>
+              </View>
+            ))}
+            {invites.map((r) => (
+              <View key={r.key} style={styles.request}>
+                <Text style={styles.requestText}>
+                  <Trans
+                    i18nKey="home.invitesYou"
+                    values={{ who: r.invitedBy, room: r.name }}
+                    components={{ strong: <Text style={styles.strong} /> }}
+                  />
+                </Text>
+                <View style={styles.buttons}>
+                  <Button
+                    label={t('home.join')}
+                    kind="primary"
+                    onPress={() => ignore(run(async () => {
+                      await call('acceptRoomInvite', r.key)
+                      openRoom(r.key)
+                    }))}
+                  />
+                  <Button label={t('home.decline')} kind="danger" onPress={() => ignore(run(() => call('declineRoomInvite', r.key)))} />
+                </View>
+              </View>
+            ))}
           </View>
-        ))}
+        )}
 
-        {/* Rooms */}
-        <Text style={styles.label}>{t('home.rooms')}</Text>
-        <View style={styles.inline}>
-          <TextInput
-            style={[styles.input, styles.grow]}
-            value={roomName}
-            onChangeText={setRoomName}
-            onSubmitEditing={createRoom}
-            placeholder={t('home.roomName')}
-            placeholderTextColor={colors.textDim}
-            maxLength={64}
-            returnKeyType="done"
+        {/*& Rooms */}
+        <View style={styles.section}>
+          <SectionTitle
+            label={t('home.rooms')}
+            open={adding === 'room'}
+            onToggle={() => toggle('room')}
+            addLabel={t('home.createRoom')}
           />
-          <Button label={t('home.create')} onPress={createRoom} disabled={!roomName.trim()} />
+          {adding === 'room' && (
+            <InlineForm placeholder={t('home.roomName')} submitLabel={t('home.create')} onSubmit={createRoom} />
+          )}
+          {myRooms.length === 0 && adding !== 'room' && <Text style={styles.empty}>{t('home.noRooms')}</Text>}
+          {myRooms.map((r) => (
+            <Row
+              key={r.key}
+              avatar={<Avatar src={r.avatar} name={r.name} size={36} />}
+              name={r.name}
+              note={r.status === 'joining' ? t('home.joining') : undefined}
+              onPress={() => openRoom(r.key)}
+            />
+          ))}
         </View>
-        {myRooms.length === 0 ? (
-          <Text style={styles.muted}>{t('mobile.noRooms')}</Text>
-        ) : (
-          myRooms.map((r) => <RoomRow key={r.key} room={r} />)
-        )}
 
-        {/* Friends */}
-        <Text style={styles.label}>{t('home.friends')}</Text>
-        {friends.length === 0 ? (
-          <Text style={styles.muted}>{t('mobile.noFriends')}</Text>
-        ) : (
-          friends.map((f) => <FriendRow key={f.key} friend={f} />)
-        )}
+        {/*& Friends */}
+        <View style={styles.section}>
+          <SectionTitle
+            label={t('home.friends')}
+            open={adding === 'friend'}
+            onToggle={() => toggle('friend')}
+            addLabel={t('home.addFriend')}
+          />
+          {adding === 'friend' && (
+            <InlineForm placeholder={t('home.friendCode')} submitLabel={t('home.sendRequest')} onSubmit={addFriend} code />
+          )}
+          {contacts.length === 0 && adding !== 'friend' && <Text style={styles.empty}>{t('home.noFriends')}</Text>}
+          {contacts.map((f) => (
+            <Row
+              key={f.key}
+              avatar={<Avatar src={f.avatar} name={f.name} size={36} status={f.online ? 'online' : 'offline'} />}
+              name={f.name}
+              note={f.status === 'outgoing' ? t('home.pending') : undefined}
+              // A request I sent is not a conversation yet
+              onPress={f.status === 'accepted' ? () => openChat(f.key) : undefined}
+            />
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   )
@@ -240,15 +344,65 @@ export const HomeScreen = () => {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   center: { alignItems: 'center', justifyContent: 'center', gap: space * 2, padding: space * 3 },
-  content: { padding: space * 2, gap: space },
-  title: { color: colors.accent, fontFamily: fonts.mono, fontSize: 22, marginBottom: space },
-  label: {
-    color: colors.textDim,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginTop: space * 2
+  pressed: { opacity: 0.6 },
+  muted: { color: colors.textMuted },
+  strong: { fontWeight: 'bold', color: colors.text },
+  error: { color: colors.danger, paddingHorizontal: space * 2, paddingTop: space },
+
+  //& Profile
+  profile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space * 1.5,
+    padding: space * 2,
+    backgroundColor: colors.bgDeep
   },
+  identity: { flex: 1, minWidth: 0, gap: space / 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space },
+  name: { flexShrink: 1, color: colors.text, fontSize: 19, fontWeight: '600' },
+  nameEditing: {
+    backgroundColor: colors.bg,
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: radius,
+    paddingHorizontal: space,
+    paddingVertical: 2
+  },
+  key: { color: colors.textMuted, fontFamily: fonts.mono, fontSize: 13 },
+  gear: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+
+  //& Lists
+  lists: { paddingVertical: space, paddingBottom: space * 4 },
+  section: { paddingHorizontal: space, paddingVertical: space / 2 },
+  sectionTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space,
+    paddingVertical: space
+  },
+  label: {
+    flex: 1,
+    color: colors.textDim,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    letterSpacing: 1.7,
+    textTransform: 'uppercase'
+  },
+  // "+": a real button on mobile (the desktop has a bare "+" that lights up on hover)
+  add: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: radius,
+    backgroundColor: colors.bgSoft
+  },
+  addOpen: { backgroundColor: colors.accent },
+  empty: { color: colors.textMuted, fontSize: 14, paddingHorizontal: space, paddingVertical: space / 2 },
+
+  form: { gap: space, paddingHorizontal: space, paddingBottom: space },
   input: {
     backgroundColor: colors.bgDeep,
     borderColor: colors.border,
@@ -258,41 +412,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: space * 1.5,
     paddingVertical: space
   },
-  code: {
-    color: colors.accent,
-    fontFamily: fonts.mono,
-    backgroundColor: colors.bgDeep,
-    padding: space * 1.5,
+
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space * 1.5,
+    paddingHorizontal: space,
+    paddingVertical: space,
     borderRadius: radius
   },
-  hint: { color: colors.textMuted, fontSize: 12 },
-  muted: { color: colors.textMuted },
-  error: { color: colors.danger },
-  strong: { fontWeight: 'bold', color: colors.text },
-  row: { flexDirection: 'row', gap: space, flexWrap: 'wrap' },
-  inline: { flexDirection: 'row', gap: space, alignItems: 'center' },
-  grow: { flex: 1 },
-  invite: {
+  itemPressed: { backgroundColor: colors.bgSoft },
+  itemName: { flex: 1, color: colors.text, fontSize: 16 },
+  note: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic' },
+
+  request: {
     gap: space,
+    marginHorizontal: space,
+    marginBottom: space,
     padding: space * 1.5,
-    marginTop: space,
-    borderColor: colors.accent,
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius,
     backgroundColor: colors.bgSoft
   },
-  hash: { color: colors.textDim, fontFamily: fonts.mono, fontSize: 16, width: 10, textAlign: 'center' },
-
-  friend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space * 1.5,
-    paddingVertical: space,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1
-  },
-  friendBody: { flex: 1 },
-  friendName: { color: colors.text, fontSize: 16 },
-  friendPressed: { backgroundColor: colors.bgSoft },
-  dot: { width: 10, height: 10, borderRadius: 5 }
+  requestText: { color: colors.text, fontSize: 15 },
+  buttons: { flexDirection: 'row', gap: space }
 })

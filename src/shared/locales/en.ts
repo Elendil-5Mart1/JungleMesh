@@ -2,8 +2,6 @@
 // For French: copy this file to fr.ts, translate the values, and register it in i18n.ts
 export const en = {
   "mobile": {
-    "noFriends": "No friends yet: add one with their invite code",
-    "noRooms": "No room yet: create the first one above",
     "invite": "Invite"
   },
   "home": {

@@ -54,6 +54,10 @@ const EVENTS = [
   'call-declined'
 ]
 
+// Waiting for the data lock held by the worklet of a reloaded UI: up to 10 s
+const LOCK_ATTEMPTS = 40
+const LOCK_DELAY_MS = 250
+
 interface Request {
   id: number
   method: string
@@ -69,13 +73,38 @@ export const start = (ipc: any) => {
 
   // First call from the UI: where to store the data (the app's private folder),
   // only the React Native side knows it.
+  let starting: Promise<P2PCore> | null = null
   const init = async (dataDir: string) => {
-    if (core) return core.getState() // the UI was reloaded (Fast Refresh): the core keeps running
-    await setupI18n()
-    core = new P2PCore(dataDir)
-    for (const name of EVENTS) core.on(name, (...args: unknown[]) => send({ event: name, args }))
-    await core.start()
+    // The UI was reloaded by Fast Refresh: the core keeps running (and a 2nd init during
+    // the start waits for the same start instead of opening the data twice)
+    starting ??= setupI18n()
+      .then(() => openCore(dataDir))
+      .catch((err) => {
+        starting = null // failed: the next init tries again
+        throw err
+      })
+    core = await starting
     return core.getState()
+  }
+
+  // A FULL reload of the UI (Metro "r", RR, new dependency) creates a new JS engine, so a
+  // new worklet, while the old one still holds the lock on the data (corestore/DEVICE).
+  // The old worklet is stopped when its engine is destroyed, but slightly AFTER the new one
+  // starts: we wait for the lock to be freed instead of failing straight away.
+  const openCore = async (dataDir: string): Promise<P2PCore> => {
+    for (let attempt = 1; ; attempt++) {
+      const candidate = new P2PCore(dataDir)
+      for (const name of EVENTS) candidate.on(name, (...args: unknown[]) => send({ event: name, args }))
+      try {
+        await candidate.start()
+        return candidate
+      } catch (err) {
+        await candidate.stop().catch(() => {}) // releases what was opened before the failure
+        const locked = err instanceof Error && err.message.includes('could not be locked')
+        if (!locked || attempt >= LOCK_ATTEMPTS) throw err
+        await new Promise((resolve) => setTimeout(resolve, LOCK_DELAY_MS))
+      }
+    }
   }
 
   const handle = async ({ id, method, args = [] }: Request) => {
