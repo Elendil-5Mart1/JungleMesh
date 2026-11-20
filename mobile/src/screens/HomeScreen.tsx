@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    color: colors.textDim,
+    color: colors.text, // brighter than the desktop (textDim): easier to spot on a phone
     fontFamily: fonts.mono,
     fontSize: 12,
     letterSpacing: 1.7,
