@@ -13,5 +13,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./src/renderer/src/*"] }
   },
-  "include": ["src/**/*", "electron.vite.config.ts"]
+  "include": ["src/**/*", "electron.vite.config.ts", "mobile/worker/*.ts"]
 }

@@ -1,0 +1,17 @@
+diff --git a/node_modules/bare-link/lib/platform/android.js b/node_modules/bare-link/lib/platform/android.js
+index f017b38..ba82e05 100644
+--- a/node_modules/bare-link/lib/platform/android.js
++++ b/node_modules/bare-link/lib/platform/android.js
+@@ -93,6 +93,12 @@ module.exports = async function* android(base, pkg, name, version, opts = {}) {
+     const so = path.join(dir, `lib${name}.${version}.so`)
+     result.push(so)
+     binary.toDisk(so)
++
++    // JungleMesh patch (patches/bare-link+*.patch): LIEF silently writes an EMPTY file when it
++    // has to grow the SONAME of a tiny 32-bit ARM prebuild (bare-path, bare-inspect).
++    // Bare loads linked addons by file name, so the original prebuild works as is.
++    if ((await fs.readFile(so)).byteLength === 0) await fs.copyFile(prebuild, so)
++
+     yield so
+   }
+ 

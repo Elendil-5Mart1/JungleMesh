@@ -1,6 +1,11 @@
 //* English texts: the application's reference language
 // For French: copy this file to fr.ts, translate the values, and register it in i18n.ts
 export const en = {
+  "mobile": {
+    "noFriends": "No friends yet: add one with their invite code",
+    "noRooms": "No room yet: create the first one above",
+    "invite": "Invite"
+  },
   "home": {
     "connecting": "Connecting to the network…",
     "nameHint": "Your display name (editable)",
@@ -49,6 +54,7 @@ export const en = {
     "inviteCodeHint": "Give it to a friend so they can add you. It never changes.",
     "copied": "Copied ✓",
     "copy": "Copy",
+    "share": "Share",
     "toasts": "Windows notifications",
     "toastsHint": "A pop-up at the bottom right when the app is not in the foreground. Badges are always shown.",
     "flash": "Flash the taskbar",

@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "JungleMesh",
+    "slug": "junglemesh",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "junglemesh",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#07090d",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.junglemesh.app"
+    },
+    "android": {
+      "package": "org.junglemesh.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#07090d",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "./plugins/withCmakeVersion",
+      [
+        "expo-bare-kit",
+        {
+          "workers": [
+            "worker/index.js"
+          ]
+        }
+      ],
+      "expo-router"
+    ]
+  }
+}

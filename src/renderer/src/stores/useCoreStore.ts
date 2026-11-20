@@ -4,7 +4,8 @@
 import { create } from 'zustand'
 import type { AppSettings, ChatMessage, CoreState, UnreadCounts } from '../../../shared/types'
 import { playNotifSound, startRing } from '@/utils/notifSound'
-import { annotate, type Annotation } from '../../../shared/annotations'
+import type { Annotation } from '../../../shared/annotations'
+import { annotateList, insertMessage, mergeHistory, removeMessage } from '../../../shared/messageList'
 
 interface CoreStore extends Partial<CoreState> {
   messages: Record<string, ChatMessage[]> // friend key → messages
@@ -38,40 +39,26 @@ export const useCoreStore = create<CoreStore>((set, get) => ({
     if (!get().messages[key]) set((s) => ({ messages: { ...s.messages, [key]: [] } }))
     const before = new Set(get().messages[key].map((m) => m.id))
     const list = await window.api.getHistory(key)
-    const ids = new Set(list.map((m) => m.id))
-    const arrived = get().messages[key].filter((m) => !before.has(m.id) && !ids.has(m.id))
-    get().setHistory(key, arrived.length ? [...list, ...arrived].sort((a, b) => a.ts - b.ts) : list)
+    get().setHistory(key, mergeHistory(list, get().messages[key], before))
   },
+  // The list rules (sorting, anti-duplicate, author checks) live in shared/messageList.ts
   addMessage: (key, msg) =>
     set((s) => {
       // Every window receives every message: only the conversations this window displays (history loaded)
       // are kept, otherwise the home window would pile up all the messages of all conversations for days
       const list = s.messages[key]
-      if (!list || list.some((m) => m.id === msg.id)) return s // not displayed here / anti-duplicate
-      // Sorted by date: usually the newest (appended), but after a reconnection older messages arrive late
-      let i = list.length
-      while (i > 0 && list[i - 1].ts > msg.ts) i--
-      const next = [...list.slice(0, i), msg, ...list.slice(i)]
-      return { messages: { ...s.messages, [key]: next } }
+      if (!list) return s // not displayed here
+      const next = insertMessage(list, msg)
+      return next === list ? s : { messages: { ...s.messages, [key]: next } }
     }),
-  // Only the author can delete a message: the author is checked too, an id alone is not enough
   removeMessage: (key, id, author) =>
-    set((s) =>
-      s.messages[key] ? { messages: { ...s.messages, [key]: s.messages[key].filter((m) => !(m.id === id && m.from === author)) } } : s
-    ),
-  // Edit or reaction received live: same rules as the history (shared/annotations.ts)
+    set((s) => (s.messages[key] ? { messages: { ...s.messages, [key]: removeMessage(s.messages[key], id, author) } } : s)),
   annotateMessage: (key, annotation) =>
     set((s) => {
       const list = s.messages[key]
       if (!list) return s // not displayed here (the next history load applies it)
-      // Every message with that id (annotate keeps only the one of the right author)
-      let changed = false
-      const next = list.map((m) => {
-        const after = annotate(m, annotation)
-        if (after !== m) changed = true
-        return after
-      })
-      return changed ? { messages: { ...s.messages, [key]: next } } : s
+      const next = annotateList(list, annotation)
+      return next === list ? s : { messages: { ...s.messages, [key]: next } }
     })
 }))
 

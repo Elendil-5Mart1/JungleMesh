@@ -1,0 +1,8 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true
+  },
+  // The worker runs the desktop core: it is type-checked with it, by the root tsconfig
+  "exclude": ["node_modules", "worker", "scripts"]
+}
