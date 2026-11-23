@@ -13,6 +13,7 @@ import { changeMyAvatar } from '../avatar'
 import { call } from '../bridge'
 import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
+import { chooseDownloadDir, folderLabel } from '../files'
 import { useCore } from '../store'
 import { colors, fonts, radius, space } from '../theme'
 import { IS_STORE_BUILD } from '../updates'
@@ -144,6 +145,16 @@ export const SettingsScreen = () => {
           : t('settings.messageTtlNever')}
       </Text>
 
+      {/*& Download folder of the received files (see files.ts) */}
+      <Text style={[styles.label, styles.section]}>//{t('mobile.downloadDir')}</Text>
+      <View style={styles.row}>
+        <Text style={[styles.folder, !settings?.downloadDir && styles.hint]} numberOfLines={2}>
+          {settings?.downloadDir ? folderLabel(settings.downloadDir) : t('mobile.downloadDirNone')}
+        </Text>
+        <Button label={t('mobile.downloadDirChange')} onPress={() => run(chooseDownloadDir)} />
+      </View>
+      <Text style={styles.hint}>{t('mobile.downloadDirHint')}</Text>
+
       {/*& Privacy: stealth mode and the blocked people (desktop: Settings › Privacy) */}
       <Text style={[styles.label, styles.section]}>//{t('settings.tabs.privacy')}</Text>
       <Text style={styles.hint}>{t('mobile.privacyIntro')}</Text>
@@ -241,5 +252,6 @@ const styles = StyleSheet.create({
   unit: { color: colors.text, alignSelf: 'center' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space },
   switchLabel: { color: colors.text, flex: 1 },
-  row: { flexDirection: 'row', gap: space, flexWrap: 'wrap' }
+  row: { flexDirection: 'row', gap: space, flexWrap: 'wrap' },
+  folder: { flex: 1, minWidth: 120, alignSelf: 'center', color: colors.text, fontFamily: fonts.mono, fontSize: 13 }
 })

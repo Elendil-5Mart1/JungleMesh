@@ -1,13 +1,15 @@
 //* Message list shared by the DM and room screens
 // Mobile counterpart of src/renderer/src/components/MessageList.tsx. A long press on a message opens
 // its menu (react, copy, edit and delete my own): the desktop's hover bar + right click.
-// Files come later: an attachment is shown as "📎 name".
+// Attachments: components/FileCard (image in the chat, or a card to save the file).
 import { useMemo, useState } from 'react'
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '../../../src/shared/types'
 import { call } from '../bridge'
+import { DEFAULT_IMAGE_TTL_HOURS } from '../files'
+import { FileCard } from './FileCard'
 import { Markdown } from './Markdown'
 import { ActionSheet, Prompt, type PromptSpec, type SheetSpec } from './Sheet'
 import { colors, radius, space } from '../theme'
@@ -26,11 +28,13 @@ interface BubbleProps {
   mine: boolean
   myKey?: string
   header: boolean // first of a group: show the author and the time
+  convKey: string
+  imageTtlHours: number
   onLongPress: (msg: ChatMessage) => void
   onReact: (msg: ChatMessage, emoji: string) => void // tap on a reaction: add mine or take it back
 }
 
-const Bubble = ({ msg, author, mine, myKey, header, onLongPress, onReact }: BubbleProps) => {
+const Bubble = ({ msg, author, mine, myKey, header, convKey, imageTtlHours, onLongPress, onReact }: BubbleProps) => {
   const { t } = useTranslation()
 
   // Call event written in the history (only "declined" for now): a system line
@@ -54,8 +58,17 @@ const Bubble = ({ msg, author, mine, myKey, header, onLongPress, onReact }: Bubb
           {time(msg.ts)}
         </Text>
       )}
-      {!!msg.file && <Text style={styles.text}>📎 {msg.file.name}</Text>}
       {!!msg.text && <Markdown text={msg.text} style={styles.text} />}
+      {!!msg.file && (
+        <FileCard
+          file={msg.file}
+          ts={msg.ts}
+          ttlHours={imageTtlHours}
+          convId={convKey}
+          mine={mine}
+          onLongPress={() => onLongPress(msg)}
+        />
+      )}
       {!!msg.edited && <Text style={styles.edited}>{t('message.edited')}</Text>}
       {reactions.length > 0 && (
         <View style={styles.reactions}>
@@ -87,9 +100,19 @@ interface MessageListProps {
   myKey?: string
   nameOf: (key: string) => string // author's display name
   empty?: string // shown when there is no message yet
+  imageTtlHours?: number // lifetime of shared images (room creator's choice), 0 = never
+  onReport?: (msg: ChatMessage) => void // "Report" in the menu of the others' messages (see report.ts)
 }
 
-export const MessageList = ({ convKey, messages, myKey, nameOf, empty }: MessageListProps) => {
+export const MessageList = ({
+  convKey,
+  messages,
+  myKey,
+  nameOf,
+  empty,
+  imageTtlHours = DEFAULT_IMAGE_TTL_HOURS,
+  onReport
+}: MessageListProps) => {
   const { t } = useTranslation()
   const [sheet, setSheet] = useState<SheetSpec | null>(null)
   const [prompt, setPrompt] = useState<PromptSpec | null>(null)
@@ -127,6 +150,14 @@ export const MessageList = ({ convKey, messages, myKey, nameOf, empty }: Message
         danger: true,
         confirm: t('mobile.deleteMessageAsk'),
         onPress: () => call('deleteMessage', convKey, msg.id).catch(() => {})
+      })
+    }
+    if (!mine && onReport) {
+      actions.push({
+        label: t('report.action'),
+        danger: true,
+        confirm: t('report.ask', { name: nameOf(msg.from) }),
+        onPress: () => onReport(msg)
       })
     }
     setSheet({
@@ -174,6 +205,8 @@ export const MessageList = ({ convKey, messages, myKey, nameOf, empty }: Message
             mine={item.from === myKey}
             myKey={myKey}
             header={header}
+            convKey={convKey}
+            imageTtlHours={imageTtlHours}
             onLongPress={openMenu}
             onReact={react}
           />

@@ -12,10 +12,13 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '../../../src/shared/types'
 import { call } from '../bridge'
+import { sendAnyFile, sendPhoto } from '../files'
+import { report } from '../report'
 import { Composer } from '../components/Composer'
 import { ActionSheet, Prompt, type PromptSpec, type SheetSpec } from '../components/Sheet'
 import { MessageList } from '../components/MessageList'
 import { useCore } from '../store'
+import { useOnScreen } from '../useOnScreen'
 import { colors, fonts, radius, space } from '../theme'
 
 const NO_MESSAGES: ChatMessage[] = [] // stable empty list (a new [] would re-render on every store change)
@@ -28,12 +31,16 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
   const { t } = useTranslation()
   const me = useCore((s) => s.state?.me)
   const room = useCore((s) => s.state?.rooms.find((r) => r.key === roomKey))
+  const friends = useCore((s) => s.state?.friends)
   const messages = useCore((s) => s.messages[roomKey] ?? NO_MESSAGES)
   const loadHistory = useCore((s) => s.loadHistory)
   const headerHeight = useHeaderHeight()
   const [channelId, setChannelId] = useState('general')
   const [sheet, setSheet] = useState<SheetSpec | null>(null)
   const [prompt, setPrompt] = useState<PromptSpec | null>(null)
+  // Number of messages already seen per channel → the other tabs show a dot (as the desktop's bold channels)
+  const [seen, setSeen] = useState<Record<string, number>>({})
+  useOnScreen(roomKey)
 
   // History reloads when the status changes ("joining" → "joined": the members' logs become readable)
   useEffect(() => {
@@ -42,6 +49,22 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
 
   // Only the messages of the open channel (recomputed when the list or the channel changes)
   const shown = useMemo(() => messages.filter((m) => channelOf(m) === channelId), [messages, channelId])
+
+  // Messages counted per channel (recomputed only when the list changes)
+  const countByChannel = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const m of messages) counts[channelOf(m)] = (counts[channelOf(m)] ?? 0) + 1
+    return counts
+  }, [messages])
+
+  // The open channel is always "seen"; on first load, everything is considered seen
+  useEffect(() => {
+    setSeen((prev) => {
+      const next = { ...prev, [channelId]: countByChannel[channelId] ?? 0 }
+      for (const id of Object.keys(countByChannel)) next[id] ??= countByChannel[id]
+      return next
+    })
+  }, [countByChannel, channelId])
 
   if (!room) {
     return (
@@ -117,6 +140,7 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
             {textChannels.map((c) => {
               const active = c.id === channel?.id
+              const unseen = !active && (countByChannel[c.id] ?? 0) > (seen[c.id] ?? 0)
               return (
                 <Pressable
                   key={c.id}
@@ -124,7 +148,8 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
                   onLongPress={room.isOwner && c.id !== 'general' ? () => channelMenu(c.id, c.name) : undefined}
                   style={[styles.tab, active && styles.tabActive]}
                 >
-                  <Text style={[styles.tabText, active && styles.tabTextActive]}>#{c.name}</Text>
+                  <Text style={[styles.tabText, active && styles.tabTextActive, unseen && styles.tabTextUnseen]}>#{c.name}</Text>
+                  {unseen && <View style={styles.unseenDot} />}
                 </Pressable>
               )
             })}
@@ -145,12 +170,23 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
         myKey={me?.publicKey}
         nameOf={nameOf}
         empty={channel ? t('room.channelStart', { name: channel.name }) : undefined}
+        imageTtlHours={room.imageTtl}
+        onReport={(msg) =>
+          void report({
+            key: msg.from,
+            name: nameOf(msg.from),
+            where: `#${room.name}`,
+            friend: !!friends?.some((f) => f.key === msg.from && f.status === 'accepted'),
+            msg
+          })
+        }
       />
 
       <Composer
         placeholder={joined && channel ? t('room.sendIn', { name: channel.name }) : t('room.enrolling')}
         disabled={!joined || !channel}
         onSend={(text) => call('send', roomKey, text, channel?.id)}
+        onAttach={(kind) => (kind === 'photo' ? sendPhoto(roomKey, channel?.id) : sendAnyFile(roomKey, channel?.id))}
       />
       <ActionSheet spec={sheet} onClose={() => setSheet(null)} />
       <Prompt spec={prompt} onClose={() => setPrompt(null)} />
@@ -171,6 +207,9 @@ const styles = StyleSheet.create({
   tabsBar: { borderBottomColor: colors.line, borderBottomWidth: 1 },
   tabs: { gap: space, paddingHorizontal: space * 1.5, paddingVertical: space },
   tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space / 2,
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius,
@@ -180,6 +219,8 @@ const styles = StyleSheet.create({
   tabActive: { borderColor: colors.accent, backgroundColor: colors.bgSoft },
   tabText: { color: colors.textMuted },
   tabTextActive: { color: colors.accent },
+  tabTextUnseen: { color: colors.text, fontWeight: 'bold' },
+  unseenDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger },
 
   banner: {
     color: colors.warn,

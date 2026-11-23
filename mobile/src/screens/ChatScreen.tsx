@@ -9,9 +9,12 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage, Friend } from '../../../src/shared/types'
 import { call } from '../bridge'
+import { sendAnyFile, sendPhoto } from '../files'
+import { report } from '../report'
 import { Composer } from '../components/Composer'
 import { MessageList } from '../components/MessageList'
 import { useCore } from '../store'
+import { useOnScreen } from '../useOnScreen'
 import { colors, space } from '../theme'
 
 const NO_MESSAGES: ChatMessage[] = [] // stable empty list (a new [] would re-render on every store change)
@@ -28,6 +31,7 @@ export const ChatScreen = ({ friendKey }: { friendKey: string }) => {
   useEffect(() => {
     void loadHistory(friendKey)
   }, [friendKey, loadHistory])
+  useOnScreen(friendKey) // messages read as they arrive, unread counter cleared
 
   const name = friend?.name ?? friendKey.slice(0, 8)
   const nameOf = (key: string) => (key === me?.publicKey ? me.name : name)
@@ -43,11 +47,21 @@ export const ChatScreen = ({ friendKey }: { friendKey: string }) => {
         }}
       />
 
-      <MessageList convKey={friendKey} messages={messages} myKey={me?.publicKey} nameOf={nameOf} />
+      <MessageList
+        convKey={friendKey}
+        messages={messages}
+        myKey={me?.publicKey}
+        nameOf={nameOf}
+        onReport={(msg) => void report({ key: friendKey, name, where: t('report.dm'), friend: true, msg })}
+      />
 
       {!friend?.online && <Text style={styles.notice}>{t('chat.offline', { name })}</Text>}
 
-      <Composer placeholder={t('chat.sendTo', { name })} onSend={(text) => call('send', friendKey, text)} />
+      <Composer
+        placeholder={t('chat.sendTo', { name })}
+        onSend={(text) => call('send', friendKey, text)}
+        onAttach={(kind) => (kind === 'photo' ? sendPhoto(friendKey) : sendAnyFile(friendKey))}
+      />
     </KeyboardAvoidingView>
   )
 }

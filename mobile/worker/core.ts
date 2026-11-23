@@ -11,6 +11,8 @@ import { readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { P2PCore } from '../../src/main/p2p/core'
 import { setupI18n } from '../../src/shared/i18n'
+import type { ChatMessage, CoreState } from '../../src/shared/types'
+import { createUnread } from './unread'
 
 //& What the UI may reach
 // An explicit list: TypeScript's `private` does not exist at runtime,
@@ -44,7 +46,13 @@ const METHODS = new Set([
   'editMessage',
   'react',
   'setImageTtl',
-  'setRoomImageTtl'
+  'setRoomImageTtl',
+  // Files: paths in the app's cache, prepared by the UI (see mobile/src/files.ts)
+  'sendFilePath',
+  'saveFile',
+  'confirmReceived',
+  'releaseFile',
+  'imageDataUrl'
 ])
 
 const EVENTS = [
@@ -63,9 +71,10 @@ export interface MobileSettings {
   messageTtlDays: number // messages older than this are hidden and their received files erased (0 = never)
   checkUpdates: boolean // look for a newer APK on GitHub (see mobile/src/updates.ts), like the desktop's autoUpdate
   stealth: boolean // stealth mode: only friends and room members can connect (P2PCore.setStealth)
+  downloadDir: string // content:// URI of the folder where received files are saved ('' = not chosen yet)
 }
 
-const DEFAULT_SETTINGS: MobileSettings = { messageTtlDays: 0, checkUpdates: true, stealth: false }
+const DEFAULT_SETTINGS: MobileSettings = { messageTtlDays: 0, checkUpdates: true, stealth: false, downloadDir: '' }
 const SETTINGS_FILE = 'mobile-settings.json'
 const PURGE_DELAY_MS = 20_000 // first purge shortly after the start, then every 30 min (as on the desktop)
 const PURGE_EVERY_MS = 30 * 60_000
@@ -76,7 +85,11 @@ const cleanSettings = (raw: any): MobileSettings => {
   return {
     messageTtlDays: Number.isSafeInteger(days) && days > 0 && days <= 36_500 ? days : 0,
     checkUpdates: typeof raw?.checkUpdates === 'boolean' ? raw.checkUpdates : DEFAULT_SETTINGS.checkUpdates,
-    stealth: typeof raw?.stealth === 'boolean' ? raw.stealth : DEFAULT_SETTINGS.stealth
+    stealth: typeof raw?.stealth === 'boolean' ? raw.stealth : DEFAULT_SETTINGS.stealth,
+    downloadDir:
+      typeof raw?.downloadDir === 'string' && raw.downloadDir.startsWith('content://') && raw.downloadDir.length < 2000
+        ? raw.downloadDir
+        : DEFAULT_SETTINGS.downloadDir
   }
 }
 
@@ -106,14 +119,20 @@ export const start = (ipc: any) => {
   let settings: MobileSettings = DEFAULT_SETTINGS
   let settingsPath = ''
   let purgeTimer: ReturnType<typeof setInterval> | null = null
+  let myKey = '' // known once the core has started (my own messages are not unread)
+  let unread: ReturnType<typeof createUnread> | null = null
 
   const init = async (dataDir: string) => {
     // The UI was reloaded by Fast Refresh: the core keeps running (and a 2nd init during
     // the start waits for the same start instead of opening the data twice)
     starting ??= setupI18n()
       .then(() => loadSettings(dataDir))
+      .then(() => loadUnread(dataDir))
       .then(() => openCore(dataDir))
       .then((started) => {
+        myKey = started.getState().me.publicKey
+        // Pruning the counters of vanished conversations only once the friends and rooms are loaded
+        started.on('state', (state: CoreState) => unread?.onState(state))
         startPurge(started)
         return started
       })
@@ -132,6 +151,11 @@ export const start = (ipc: any) => {
     } catch {
       settings = DEFAULT_SETTINGS // first start, or unreadable file
     }
+  }
+
+  const loadUnread = async (dataDir: string) => {
+    unread ??= createUnread(dataDir, () => myKey, (counts) => send({ event: 'unread', args: [counts] }))
+    await unread.load()
   }
 
   // Atomic write (.tmp then rename): the file is never half-written if the app is killed
@@ -163,6 +187,7 @@ export const start = (ipc: any) => {
       candidate.setMessageTtl(settings.messageTtlDays)
       candidate.setStealth(settings.stealth) // before the swarm starts: its firewall reads it
       for (const name of EVENTS) candidate.on(name, (...args: unknown[]) => send({ event: name, args }))
+      candidate.on('message', (convId: string, msg: ChatMessage) => unread?.onMessage(convId, msg))
       try {
         await candidate.start()
         return candidate
@@ -181,6 +206,10 @@ export const start = (ipc: any) => {
       if (method === 'init') result = await init(String(args[0]))
       else if (method === 'getSettings') result = settings
       else if (method === 'setSettings') result = await setSettings((args[0] ?? {}) as Partial<MobileSettings>)
+      // Unread counters (kept by the worker, see unread.ts): the UI says which conversation is on screen
+      else if (method === 'getUnread') result = unread?.get() ?? {}
+      else if (method === 'setActive') unread?.setActive(typeof args[0] === 'string' ? args[0] : null)
+      else if (method === 'markRead') unread?.markRead(String(args[0]))
       else if (!core) throw new Error('core not started')
       else if (!METHODS.has(method)) throw new Error(`unknown method: ${method}`)
       else result = await (core as any)[method](...args)

@@ -15,7 +15,9 @@ import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { ActionSheet, type SheetSpec } from '../components/Sheet'
+import { report } from '../report'
 import { useCore } from '../store'
+import { WelcomeScreen } from './WelcomeScreen'
 import { colors, fonts, radius, space } from '../theme'
 
 const openRoom = (key: string) => router.push({ pathname: '/room/[key]', params: { key } })
@@ -186,11 +188,12 @@ interface RowProps {
   name: string
   sub?: string // custom status of a friend, under the name
   note?: string // "joining…", "pending"
+  badge?: number // unread messages
   onPress?: () => void
   onLongPress?: () => void // the menu (the desktop's right click)
 }
 
-const Row = ({ avatar, name, sub, note, onPress, onLongPress }: RowProps) => (
+const Row = ({ avatar, name, sub, note, badge, onPress, onLongPress }: RowProps) => (
   <Pressable
     style={({ pressed }) => [styles.item, pressed && (!!onPress || !!onLongPress) && styles.itemPressed]}
     onPress={onPress}
@@ -199,7 +202,7 @@ const Row = ({ avatar, name, sub, note, onPress, onLongPress }: RowProps) => (
   >
     {avatar}
     <View style={styles.itemText}>
-      <Text style={[styles.itemName, !onPress && styles.muted]} numberOfLines={1}>
+      <Text style={[styles.itemName, !onPress && styles.muted, !!badge && styles.strong]} numberOfLines={1}>
         {name}
       </Text>
       {!!sub && (
@@ -209,6 +212,12 @@ const Row = ({ avatar, name, sub, note, onPress, onLongPress }: RowProps) => (
       )}
     </View>
     {!!note && <Text style={styles.note}>{note}</Text>}
+    {/* Red unread badge, Discord-style (capped at 99+), as on the desktop */}
+    {!!badge && (
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
+      </View>
+    )}
   </Pressable>
 )
 
@@ -217,6 +226,7 @@ export const HomeScreen = () => {
   const { t } = useTranslation()
   const state = useCore((s) => s.state)
   const bootError = useCore((s) => s.error)
+  const unread = useCore((s) => s.unread)
   const [adding, setAdding] = useState<'friend' | 'room' | null>(null)
   const [error, setError] = useState('')
   const [sheet, setSheet] = useState<SheetSpec | null>(null)
@@ -239,6 +249,7 @@ export const HomeScreen = () => {
   }
 
   const { me, friends, rooms } = state
+  if (!me.named) return <WelcomeScreen me={me} /> // first launch: choose a name first, as on the desktop
   const requests = friends.filter((f: Friend) => f.status === 'incoming')
   const contacts = friends.filter((f: Friend) => f.status !== 'incoming')
   const invites = rooms.filter((r: Room) => r.status === 'invited')
@@ -283,6 +294,12 @@ export const HomeScreen = () => {
         f.status === 'accepted'
           ? [
               { label: t('menu.openChat'), onPress: () => openChat(f.key) },
+              {
+                label: t('report.action'),
+                danger: true,
+                confirm: t('report.ask', { name: f.name }),
+                onPress: () => report({ key: f.key, name: f.name, where: t('report.dm'), friend: true })
+              },
               {
                 label: t('menu.removeFriend'),
                 danger: true,
@@ -413,6 +430,7 @@ export const HomeScreen = () => {
               avatar={<Avatar src={r.avatar} name={r.name} size={36} />}
               name={r.name}
               note={r.status === 'joining' ? t('home.joining') : undefined}
+              badge={unread[r.key]}
               onPress={() => openRoom(r.key)}
               onLongPress={() => roomMenu(r)}
             />
@@ -438,6 +456,7 @@ export const HomeScreen = () => {
               name={f.name}
               sub={f.customStatus}
               note={f.status === 'outgoing' ? t('home.pending') : undefined}
+              badge={unread[f.key]}
               // A request I sent is not a conversation yet
               onPress={f.status === 'accepted' ? () => openChat(f.key) : undefined}
               onLongPress={() => friendMenu(f)}
@@ -547,6 +566,16 @@ const styles = StyleSheet.create({
   itemName: { color: colors.text, fontSize: 16 },
   itemSub: { color: colors.textMuted, fontSize: 13 },
   note: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic' },
+  badge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.danger
+  },
+  badgeText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
 
   request: {
     gap: space,

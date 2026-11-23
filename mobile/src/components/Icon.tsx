@@ -16,7 +16,16 @@ const ICONS = {
   ),
   close: <Path d="M6 6l12 12M18 6 6 18" />,
   plus: <Path d="M12 5v14M5 12h14" />,
-  pencil: <Path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />
+  pencil: <Path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />,
+  file: (
+    <>
+      <Path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <Path d="M14 3v5h5M9 13h6M9 17h6" />
+    </>
+  ),
+  // Paperclip and download arrow: drawn inline by the desktop's Composer and FileCard
+  attach: <Path d="M20 11.5 12.2 19.3a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />,
+  download: <Path d="M12 4v11M7 11l5 5 5-5M5 20h14" />
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof ICONS

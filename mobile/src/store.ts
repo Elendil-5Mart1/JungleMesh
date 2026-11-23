@@ -1,7 +1,7 @@
 //* Global state (Zustand): the core's state and the open conversations, as on the desktop
 import { create } from 'zustand'
 import { Paths } from 'expo-file-system'
-import type { ChatMessage, CoreState } from '../../src/shared/types'
+import type { ChatMessage, CoreState, UnreadCounts } from '../../src/shared/types'
 import type { Annotation } from '../../src/shared/annotations'
 import { annotateList, insertMessage, mergeHistory, removeMessage } from '../../src/shared/messageList'
 import { call, on } from './bridge'
@@ -12,12 +12,14 @@ export interface MobileSettings {
   messageTtlDays: number // 0 = keep messages forever
   checkUpdates: boolean // look for a newer APK on GitHub
   stealth: boolean // only friends and room members can connect
+  downloadDir: string // folder chosen for received files (content:// URI), '' = asked on the first save
 }
 
 interface CoreStore {
   state: CoreState | null // null while the core starts
   error: string | null // the core could not start
   messages: Record<string, ChatMessage[]> // conversation key (friend or room) → messages, once opened
+  unread: UnreadCounts // conversation key → messages not read yet (counted by the worker, see worker/unread.ts)
   settings: MobileSettings | null
   update: Update | null // a newer APK found on GitHub, until the user hides it
   setUpdate: (update: Update | null) => void
@@ -45,6 +47,7 @@ export const useCore = create<CoreStore>((set, get) => {
     state: null,
     error: null,
     messages: {},
+    unread: {},
     settings: null,
     update: null,
     setUpdate: (update) => set({ update }),
@@ -56,9 +59,11 @@ export const useCore = create<CoreStore>((set, get) => {
       on('message', (key: string, msg: ChatMessage) => update(key, (list) => insertMessage(list, msg)))
       on('message-deleted', (key: string, id: string, author: string) => update(key, (list) => removeMessage(list, id, author)))
       on('message-annotated', (key: string, a: Annotation) => update(key, (list) => annotateList(list, a)))
+      on('unread', (unread: UnreadCounts) => set({ unread }))
       try {
         set({ state: await call<CoreState>('init', dataDir()) })
         set({ settings: await call<MobileSettings>('getSettings') })
+        set({ unread: await call<UnreadCounts>('getUnread') })
       } catch (err) {
         set({ error: err instanceof Error ? err.message : String(err) })
       }
