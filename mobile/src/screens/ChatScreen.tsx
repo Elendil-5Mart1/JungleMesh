@@ -43,7 +43,7 @@ export const ChatScreen = ({ friendKey }: { friendKey: string }) => {
         }}
       />
 
-      <MessageList messages={messages} myKey={me?.publicKey} nameOf={nameOf} />
+      <MessageList convKey={friendKey} messages={messages} myKey={me?.publicKey} nameOf={nameOf} />
 
       {!friend?.online && <Text style={styles.notice}>{t('chat.offline', { name })}</Text>}
 

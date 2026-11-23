@@ -8,6 +8,7 @@ const MAX_INLINE_SIZE = 25 * 1024 * 1024 // same as journal.ts: what may travel 
 const api: ChatApi = {
   getState: () => ipcRenderer.invoke('core:getState'),
   setName: (name) => ipcRenderer.invoke('core:setName', name),
+  setCustomStatus: (text) => ipcRenderer.invoke('core:setCustomStatus', text),
   setAvatar: (avatar) => ipcRenderer.invoke('core:setAvatar', avatar),
   addFriend: (code, nickname) => ipcRenderer.invoke('friends:add', code, nickname),
   acceptRequest: (key) => ipcRenderer.invoke('friends:accept', key),

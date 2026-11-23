@@ -5,13 +5,25 @@ import type { ChatMessage, CoreState } from '../../src/shared/types'
 import type { Annotation } from '../../src/shared/annotations'
 import { annotateList, insertMessage, mergeHistory, removeMessage } from '../../src/shared/messageList'
 import { call, on } from './bridge'
+import type { Update } from './updates'
+
+// Settings of this phone, kept by the worker (see MobileSettings in worker/core.ts)
+export interface MobileSettings {
+  messageTtlDays: number // 0 = keep messages forever
+  checkUpdates: boolean // look for a newer APK on GitHub
+  stealth: boolean // only friends and room members can connect
+}
 
 interface CoreStore {
   state: CoreState | null // null while the core starts
   error: string | null // the core could not start
   messages: Record<string, ChatMessage[]> // conversation key (friend or room) → messages, once opened
+  settings: MobileSettings | null
+  update: Update | null // a newer APK found on GitHub, until the user hides it
+  setUpdate: (update: Update | null) => void
   boot: () => Promise<void>
   loadHistory: (key: string) => Promise<void>
+  saveSettings: (patch: Partial<MobileSettings>) => Promise<void>
 }
 
 // The app's private folder (file:///data/user/0/org.junglemesh.app/files/) as a plain path for Bare
@@ -33,6 +45,9 @@ export const useCore = create<CoreStore>((set, get) => {
     state: null,
     error: null,
     messages: {},
+    settings: null,
+    update: null,
+    setUpdate: (update) => set({ update }),
 
     boot: async () => {
       if (booted) return // Fast Refresh re-runs the layout's effect: subscribe only once
@@ -43,6 +58,7 @@ export const useCore = create<CoreStore>((set, get) => {
       on('message-annotated', (key: string, a: Annotation) => update(key, (list) => annotateList(list, a)))
       try {
         set({ state: await call<CoreState>('init', dataDir()) })
+        set({ settings: await call<MobileSettings>('getSettings') })
       } catch (err) {
         set({ error: err instanceof Error ? err.message : String(err) })
       }
@@ -55,6 +71,20 @@ export const useCore = create<CoreStore>((set, get) => {
       const before = new Set(get().messages[key].map((m) => m.id))
       const history = await call<ChatMessage[]>('getHistory', key)
       set((s) => ({ messages: { ...s.messages, [key]: mergeHistory(history, s.messages[key], before) } }))
+    },
+
+    // A new message lifetime changes what the history shows: the conversations already loaded are re-read
+    saveSettings: async (patch) => {
+      const settings = await call<MobileSettings>('setSettings', patch)
+      set({ settings })
+      if ('messageTtlDays' in patch) {
+        await Promise.all(
+          Object.keys(get().messages).map(async (key) => {
+            const history = await call<ChatMessage[]>('getHistory', key)
+            set((s) => ({ messages: { ...s.messages, [key]: history } }))
+          })
+        )
+      }
     }
   }
 })

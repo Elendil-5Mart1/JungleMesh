@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '../../../src/shared/types'
 import { call } from '../bridge'
 import { Composer } from '../components/Composer'
+import { ActionSheet, Prompt, type PromptSpec, type SheetSpec } from '../components/Sheet'
 import { MessageList } from '../components/MessageList'
 import { useCore } from '../store'
 import { colors, fonts, radius, space } from '../theme'
@@ -31,6 +32,8 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
   const loadHistory = useCore((s) => s.loadHistory)
   const headerHeight = useHeaderHeight()
   const [channelId, setChannelId] = useState('general')
+  const [sheet, setSheet] = useState<SheetSpec | null>(null)
+  const [prompt, setPrompt] = useState<PromptSpec | null>(null)
 
   // History reloads when the status changes ("joining" → "joined": the members' logs become readable)
   useEffect(() => {
@@ -56,6 +59,40 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
 
   const nameOf = (key: string) => room.members.find((m) => m.key === key)?.name ?? key.slice(0, 8)
 
+  //& Channels: only the room's creator manages them (the core checks it too), #general stays
+  const createChannel = () =>
+    setPrompt({
+      title: t('mobile.newChannel'),
+      placeholder: t('room.newTextName'),
+      submitLabel: t('home.create'),
+      maxLength: 32,
+      onSubmit: (name) => call('createChannel', roomKey, name, 'text')
+    })
+
+  const channelMenu = (id: string, name: string) =>
+    setSheet({
+      title: `#${name}`,
+      actions: [
+        {
+          label: t('menu.renameChannel'),
+          onPress: () =>
+            setPrompt({
+              title: t('menu.renameChannel'),
+              value: name,
+              submitLabel: t('roomSettings.save'),
+              maxLength: 32,
+              onSubmit: (next) => call('renameChannel', roomKey, id, next)
+            })
+        },
+        {
+          label: t('menu.deleteChannel'),
+          danger: true,
+          confirm: t('mobile.deleteChannelAsk', { name }),
+          onPress: () => call('deleteChannel', roomKey, id).catch(() => {})
+        }
+      ]
+    })
+
   return (
     <KeyboardAvoidingView style={styles.screen} behavior="padding" keyboardVerticalOffset={headerHeight}>
       <Stack.Screen
@@ -73,18 +110,29 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
         }}
       />
 
-      {/* Text channels: horizontal tabs */}
-      {textChannels.length > 1 && (
+      {/* Text channels: horizontal tabs (always shown to the creator: the "+" creates a channel,
+          a long press on a tab renames or deletes it) */}
+      {(textChannels.length > 1 || room.isOwner) && (
         <View style={styles.tabsBar}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
             {textChannels.map((c) => {
               const active = c.id === channel?.id
               return (
-                <Pressable key={c.id} onPress={() => setChannelId(c.id)} style={[styles.tab, active && styles.tabActive]}>
+                <Pressable
+                  key={c.id}
+                  onPress={() => setChannelId(c.id)}
+                  onLongPress={room.isOwner && c.id !== 'general' ? () => channelMenu(c.id, c.name) : undefined}
+                  style={[styles.tab, active && styles.tabActive]}
+                >
                   <Text style={[styles.tabText, active && styles.tabTextActive]}>#{c.name}</Text>
                 </Pressable>
               )
             })}
+            {room.isOwner && (
+              <Pressable onPress={createChannel} style={styles.tab} accessibilityLabel={t('room.createText')}>
+                <Text style={styles.tabTextActive}>+</Text>
+              </Pressable>
+            )}
           </ScrollView>
         </View>
       )}
@@ -92,6 +140,7 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
       {!joined && <Text style={styles.banner}>{t('room.waitingEnroll')}</Text>}
 
       <MessageList
+        convKey={roomKey}
         messages={channel ? shown : NO_MESSAGES}
         myKey={me?.publicKey}
         nameOf={nameOf}
@@ -103,6 +152,8 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
         disabled={!joined || !channel}
         onSend={(text) => call('send', roomKey, text, channel?.id)}
       />
+      <ActionSheet spec={sheet} onClose={() => setSheet(null)} />
+      <Prompt spec={prompt} onClose={() => setPrompt(null)} />
     </KeyboardAvoidingView>
   )
 }

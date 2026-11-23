@@ -7,6 +7,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { i18nReady } from '../i18n'
 import { useCore } from '../store'
 import { colors } from '../theme'
+import { watchUpdates } from '../updates'
 
 export const RootLayout = () => {
   const boot = useCore((s) => s.boot)
@@ -14,6 +15,16 @@ export const RootLayout = () => {
   useEffect(() => {
     void i18nReady.then(boot)
   }, [boot])
+
+  // Newer APK on GitHub: shown as a banner on the home screen (never in the Play Store build)
+  useEffect(
+    () =>
+      watchUpdates(
+        () => useCore.getState().settings?.checkUpdates === true,
+        (update) => useCore.getState().setUpdate(update)
+      ),
+    []
+  )
 
   // KeyboardProvider: follows the real keyboard height on Android, which edge-to-edge no longer
   // reports by resizing the window (see ChatScreen)

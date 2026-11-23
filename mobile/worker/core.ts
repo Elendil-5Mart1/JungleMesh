@@ -7,6 +7,8 @@
 //   worker → UI  { event, args }             a core event (state, message…)
 // The same file is bundled by scripts/build-worker.mjs, which maps node:* to bare-*.
 import b4a from 'b4a'
+import { readFile, rename, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { P2PCore } from '../../src/main/p2p/core'
 import { setupI18n } from '../../src/shared/i18n'
 
@@ -17,6 +19,7 @@ const METHODS = new Set([
   'getState',
   'setName',
   'setAvatar',
+  'setCustomStatus',
   'addFriend',
   'acceptRequest',
   'declineRequest',
@@ -54,9 +57,35 @@ const EVENTS = [
   'call-declined'
 ]
 
+//& Settings of this phone (the desktop keeps them in Electron's settings.json, which does not exist here)
+// Stored next to the logs, in the app's private folder.
+export interface MobileSettings {
+  messageTtlDays: number // messages older than this are hidden and their received files erased (0 = never)
+  checkUpdates: boolean // look for a newer APK on GitHub (see mobile/src/updates.ts), like the desktop's autoUpdate
+  stealth: boolean // stealth mode: only friends and room members can connect (P2PCore.setStealth)
+}
+
+const DEFAULT_SETTINGS: MobileSettings = { messageTtlDays: 0, checkUpdates: true, stealth: false }
+const SETTINGS_FILE = 'mobile-settings.json'
+const PURGE_DELAY_MS = 20_000 // first purge shortly after the start, then every 30 min (as on the desktop)
+const PURGE_EVERY_MS = 30 * 60_000
+
+// Only known keys with a valid value: a hand-edited or older file never breaks the start
+const cleanSettings = (raw: any): MobileSettings => {
+  const days = Number(raw?.messageTtlDays)
+  return {
+    messageTtlDays: Number.isSafeInteger(days) && days > 0 && days <= 36_500 ? days : 0,
+    checkUpdates: typeof raw?.checkUpdates === 'boolean' ? raw.checkUpdates : DEFAULT_SETTINGS.checkUpdates,
+    stealth: typeof raw?.stealth === 'boolean' ? raw.stealth : DEFAULT_SETTINGS.stealth
+  }
+}
+
 // Waiting for the data lock held by the worklet of a reloaded UI: up to 10 s
 const LOCK_ATTEMPTS = 40
 const LOCK_DELAY_MS = 250
+
+// The Bare runtime's global (lifecycle events of the worklet)
+declare const Bare: { on(event: 'suspend' | 'resume', fn: () => void): void }
 
 interface Request {
   id: number
@@ -74,17 +103,54 @@ export const start = (ipc: any) => {
   // First call from the UI: where to store the data (the app's private folder),
   // only the React Native side knows it.
   let starting: Promise<P2PCore> | null = null
+  let settings: MobileSettings = DEFAULT_SETTINGS
+  let settingsPath = ''
+  let purgeTimer: ReturnType<typeof setInterval> | null = null
+
   const init = async (dataDir: string) => {
     // The UI was reloaded by Fast Refresh: the core keeps running (and a 2nd init during
     // the start waits for the same start instead of opening the data twice)
     starting ??= setupI18n()
+      .then(() => loadSettings(dataDir))
       .then(() => openCore(dataDir))
+      .then((started) => {
+        startPurge(started)
+        return started
+      })
       .catch((err) => {
         starting = null // failed: the next init tries again
         throw err
       })
     core = await starting
     return core.getState()
+  }
+
+  const loadSettings = async (dataDir: string) => {
+    settingsPath = join(dataDir, SETTINGS_FILE)
+    try {
+      settings = cleanSettings(JSON.parse(await readFile(settingsPath, 'utf-8')))
+    } catch {
+      settings = DEFAULT_SETTINGS // first start, or unreadable file
+    }
+  }
+
+  // Atomic write (.tmp then rename): the file is never half-written if the app is killed
+  const setSettings = async (patch: Partial<MobileSettings>) => {
+    if (!settingsPath) throw new Error('core not started')
+    settings = cleanSettings({ ...settings, ...patch })
+    core?.setMessageTtl(settings.messageTtlDays)
+    core?.setStealth(settings.stealth)
+    await writeFile(`${settingsPath}.tmp`, JSON.stringify(settings, null, 2))
+    await rename(`${settingsPath}.tmp`, settingsPath)
+    if (core) void core.purgeFiles().catch(() => {}) // a shorter delay frees the files right away
+    return settings
+  }
+
+  // Images past their lifetime, files of expired messages, my files already delivered: freed regularly
+  const startPurge = (started: P2PCore) => {
+    const purge = () => void started.purgeFiles().catch(() => {})
+    setTimeout(purge, PURGE_DELAY_MS)
+    purgeTimer = setInterval(purge, PURGE_EVERY_MS)
   }
 
   // A FULL reload of the UI (Metro "r", RR, new dependency) creates a new JS engine, so a
@@ -94,6 +160,8 @@ export const start = (ipc: any) => {
   const openCore = async (dataDir: string): Promise<P2PCore> => {
     for (let attempt = 1; ; attempt++) {
       const candidate = new P2PCore(dataDir)
+      candidate.setMessageTtl(settings.messageTtlDays)
+      candidate.setStealth(settings.stealth) // before the swarm starts: its firewall reads it
       for (const name of EVENTS) candidate.on(name, (...args: unknown[]) => send({ event: name, args }))
       try {
         await candidate.start()
@@ -111,6 +179,8 @@ export const start = (ipc: any) => {
     try {
       let result: unknown
       if (method === 'init') result = await init(String(args[0]))
+      else if (method === 'getSettings') result = settings
+      else if (method === 'setSettings') result = await setSettings((args[0] ?? {}) as Partial<MobileSettings>)
       else if (!core) throw new Error('core not started')
       else if (!METHODS.has(method)) throw new Error(`unknown method: ${method}`)
       else result = await (core as any)[method](...args)
@@ -130,6 +200,23 @@ export const start = (ipc: any) => {
     }
   })
 
+  // App in the background: react-native-bare-kit suspends the worklet by itself (AppState), and Bare
+  // tells us first. The swarm is suspended then resumed, otherwise its sockets and DHT routes, frozen
+  // for minutes or hours, are dead on return (new network, NAT mapping expired) and friends look offline.
+  // `starting` and not `core`: a suspend during the start waits for it. The steps are queued:
+  // a quick back-and-forth never resumes while the suspend is still running.
+  let lifecycle: Promise<unknown> = Promise.resolve()
+  const queue = (step: (c: P2PCore) => Promise<void>) => {
+    const current = starting
+    if (!current) return // not started yet: nothing to suspend
+    lifecycle = lifecycle.then(() => current.then(step)).catch(() => {})
+  }
+  Bare.on('suspend', () => queue((c) => c.suspend()))
+  Bare.on('resume', () => queue((c) => c.resume()))
+
   // Run by the harness before the worklet exits: close the swarm and the logs cleanly
-  return () => core?.stop()
+  return () => {
+    if (purgeTimer) clearInterval(purgeTimer)
+    return core?.stop()
+  }
 }

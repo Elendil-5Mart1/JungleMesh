@@ -278,6 +278,7 @@ const asKey = (value: unknown): string => {
 //& IPC bridge: the windows ask, the core answers
 ipcMain.handle('core:getState', () => core.getState())
 ipcMain.handle('core:setName', (_e, name: string) => core.setName(name))
+ipcMain.handle('core:setCustomStatus', (_e, text: string) => core.setCustomStatus(String(text)))
 ipcMain.handle('core:setAvatar', (_e, avatar: Avatar) => core.setAvatar(avatar))
 ipcMain.handle('friends:add', (_e, code: string, nickname: string) => core.addFriend(code, nickname))
 ipcMain.handle('friends:accept', (_e, key: string) => core.acceptRequest(asKey(key)))

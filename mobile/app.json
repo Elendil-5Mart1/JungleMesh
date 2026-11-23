@@ -14,6 +14,16 @@
     },
     "android": {
       "package": "org.junglemesh.app",
+      "versionCode": 1,
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.VIBRATE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#07090d",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -24,6 +34,8 @@
     },
     "plugins": [
       "./plugins/withCmakeVersion",
+      "./plugins/withNoBackup",
+      "./plugins/withReleaseSigning",
       [
         "expo-bare-kit",
         {

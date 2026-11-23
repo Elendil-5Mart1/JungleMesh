@@ -1,29 +1,33 @@
-//* Members of a room + inviting friends
-// On the desktop these are the right column and the "invite" panel of RoomView;
-// on a phone they get their own screen, opened from the room's header.
+//* Members of a room + inviting friends + the room's settings
+// On the desktop these are the right column, the "invite" panel and the settings panel of RoomView;
+// on a phone they get their own screen, opened from the room's header (or a long press on the room).
+// The creator also sets the room's picture and name, and removes a member with a long press.
 import { useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { router } from 'expo-router'
 import { Stack } from 'expo-router/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import type { RoomMember } from '../../../src/shared/types'
+import { pickAvatar } from '../avatar'
 import { call } from '../bridge'
+import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { useCore } from '../store'
-import { colors, space } from '../theme'
+import { colors, radius, space } from '../theme'
 
 //& One member
-const MemberRow = ({ member, me }: { member: RoomMember; me: boolean }) => {
+const MemberRow = ({ member, me, onLongPress }: { member: RoomMember; me: boolean; onLongPress?: () => void }) => {
   const { t } = useTranslation()
   return (
-    <View style={styles.row}>
+    <Pressable style={({ pressed }) => [styles.row, pressed && !!onLongPress && styles.pressed]} onLongPress={onLongPress}>
       <View style={[styles.dot, { backgroundColor: member.online ? colors.accent : colors.textDim }]} />
       <Text style={[styles.name, !member.online && styles.offline]}>
         {member.name}
         {me && <Text style={styles.muted}> {t('roomSettings.you')}</Text>}
       </Text>
       {member.isOwner && <Text style={styles.owner}>{t('room.owner')}</Text>}
-    </View>
+    </Pressable>
   )
 }
 
@@ -52,18 +56,82 @@ export const MembersScreen = ({ roomKey }: { roomKey: string }) => {
   )
   const pending = friends.filter((f) => room.pendingInvites.includes(f.key))
 
-  const invite = async (friendKey: string) => {
+  // Runs a core call and shows its error
+  const run = async (action: () => Promise<unknown>): Promise<boolean> => {
     setError('')
     try {
-      await call('inviteToRoom', roomKey, friendKey)
+      await action()
+      return true
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      return false
     }
+  }
+
+  const invite = (friendKey: string) => run(() => call('inviteToRoom', roomKey, friendKey))
+
+  // Creator: remove a member (system confirmation, as the desktop's second click)
+  const kick = (m: RoomMember) =>
+    Alert.alert(t('mobile.kickAsk', { name: m.name }), t('roomSettings.kickHint'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('roomSettings.kick'), style: 'destructive', onPress: () => void run(() => call('kickFromRoom', roomKey, m.key)) }
+    ])
+
+  // Leave (member) or delete for everyone (creator), then back to the home screen
+  const quit = () => {
+    const owner = room.isOwner
+    Alert.alert(
+      owner ? t('roomSettings.deleteRoomAsk', { name: room.name }) : t('roomSettings.leaveAsk', { name: room.name }),
+      owner ? t('roomSettings.deleteRoomHint') : t('roomSettings.leaveHint'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: owner ? t('roomSettings.deleteRoomYes') : t('roomSettings.leaveYes'),
+          style: 'destructive',
+          onPress: () =>
+            void run(() => call(owner ? 'deleteRoom' : 'leaveRoom', roomKey)).then((ok) => ok && router.dismissTo('/'))
+        }
+      ]
+    )
+  }
+
+  const changePicture = () =>
+    void run(async () => {
+      const avatar = await pickAvatar()
+      if (avatar) await call('setRoomAvatar', roomKey, avatar)
+    })
+
+  const rename = (value: string) => {
+    const name = value.trim()
+    if (name && name !== room.name) void run(() => call('renameRoom', roomKey, name))
   }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingBottom: space * 2 + insets.bottom }]}>
       <Stack.Screen options={{ title: room.name }} />
+
+      {/* Room settings: the creator changes them, the others just see them */}
+      <View style={styles.roomHead}>
+        <Pressable onPress={room.isOwner ? changePicture : undefined} disabled={!room.isOwner}>
+          <Avatar src={room.avatar} name={room.name} size={64} />
+        </Pressable>
+        {room.isOwner ? (
+          <View style={styles.roomSide}>
+            <TextInput
+              key={room.name}
+              style={styles.field}
+              defaultValue={room.name}
+              maxLength={64}
+              returnKeyType="done"
+              onEndEditing={(e) => rename(e.nativeEvent.text)}
+              accessibilityLabel={t('roomSettings.roomName')}
+            />
+            <Text style={styles.hint}>{t('mobile.roomPictureHint')}</Text>
+          </View>
+        ) : (
+          <Text style={styles.roomName}>{room.name}</Text>
+        )}
+      </View>
 
       {/* Members, online first */}
       {[
@@ -77,7 +145,12 @@ export const MembersScreen = ({ roomKey }: { roomKey: string }) => {
                 {title} — {list.length}
               </Text>
               {list.map((m) => (
-                <MemberRow key={m.key} member={m} me={m.key === myKey} />
+                <MemberRow
+                  key={m.key}
+                  member={m}
+                  me={m.key === myKey}
+                  onLongPress={room.isOwner && m.key !== myKey && !m.isOwner ? () => kick(m) : undefined}
+                />
               ))}
             </View>
           )
@@ -100,6 +173,14 @@ export const MembersScreen = ({ roomKey }: { roomKey: string }) => {
         </Text>
       )}
       {!!error && <Text style={styles.error}>{error}</Text>}
+
+      <View style={styles.quit}>
+        <Button
+          label={room.isOwner ? t('roomSettings.deleteRoom') : t('roomSettings.leaveRoom')}
+          kind="danger"
+          onPress={quit}
+        />
+      </View>
     </ScrollView>
   )
 }
@@ -131,5 +212,20 @@ const styles = StyleSheet.create({
   owner: { color: colors.warn, fontSize: 12 },
   muted: { color: colors.textMuted },
   hint: { color: colors.textMuted, fontSize: 12, marginTop: space },
-  error: { color: colors.danger }
+  error: { color: colors.danger },
+  pressed: { backgroundColor: colors.bgSoft },
+  roomHead: { flexDirection: 'row', alignItems: 'center', gap: space * 2 },
+  roomSide: { flex: 1, gap: space / 2 },
+  roomName: { flex: 1, color: colors.text, fontSize: 20, fontWeight: '600' },
+  field: {
+    color: colors.text,
+    fontSize: 17,
+    backgroundColor: colors.bgDeep,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius,
+    paddingHorizontal: space * 1.5,
+    paddingVertical: space
+  },
+  quit: { marginTop: space * 4, alignItems: 'flex-start' }
 })

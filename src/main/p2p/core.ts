@@ -21,6 +21,7 @@ import c from 'compact-encoding'
 import idEnc from 'hypercore-id-encoding'
 import b4a from 'b4a'
 import type { Avatar, ChannelKind, ChatMessage, BlockedContact, CoreState, Friend, FriendStatus } from '../../shared/types'
+import { MAX_CUSTOM_STATUS } from '../../shared/types'
 import {
   cleanAvatar,
   cleanFileName,
@@ -48,6 +49,7 @@ import { VoiceManager, type VoiceControl } from './voice'
 interface Hello {
   name: string
   avatar: Avatar // ~10 KB: sent on every connection, cached by the peer
+  status?: string // custom status (missing = a version without it: the last known one is kept)
   core: string | null // key of the log I write FOR you (null = not (yet) a friend)
 }
 
@@ -56,6 +58,7 @@ interface Contact {
   name: string
   status: FriendStatus | 'blocked'
   remoteCore: string | null // key of the friend's log
+  customStatus?: string // their custom status, as last announced
 }
 
 interface Peer {
@@ -80,6 +83,12 @@ const boundedJson = {
 }
 const MAX_PENDING_REQUESTS = 50 // anti-spam protection for friend requests
 const HEX_KEY = /^[0-9a-f]{64}$/
+
+// Custom status: one line (line breaks and tabs become spaces), trimmed, at most MAX_CUSTOM_STATUS characters.
+// undefined = not a string (missing field of an older version): the caller keeps what it had.
+const cleanCustomStatus = (raw: unknown): string | undefined =>
+  typeof raw === 'string' ? [...raw.replace(/\s+/g, ' ').trim()].slice(0, MAX_CUSTOM_STATUS).join('') : undefined
+
 const DM_CALL = 'dm' // channel id of a call between two friends (there is only one per pair)
 
 export class P2PCore extends EventEmitter {
@@ -90,6 +99,7 @@ export class P2PCore extends EventEmitter {
   private name = 'Anonymous'
   private named = false // a display name was chosen (profile.json)
   private avatar: Avatar = null
+  private customStatus = ''
   private avatars = new Map<string, string>() // cache: a peer's key → their avatar (avatars.json)
 
   private contacts = new Map<string, Contact>()
@@ -130,7 +140,8 @@ export class P2PCore extends EventEmitter {
     const keyPair = await this.store.createKeyPair('identity')
     this.publicKey = b4a.toString(keyPair.publicKey, 'hex')
 
-    const profile = await this.loadJson<{ name?: string; avatar?: Avatar }>('profile.json', {})
+    const profile = await this.loadJson<{ name?: string; avatar?: Avatar; customStatus?: string }>('profile.json', {})
+    this.customStatus = cleanCustomStatus(profile.customStatus) ?? ''
     if (profile.name) {
       this.name = profile.name
       this.named = true
@@ -173,7 +184,9 @@ export class P2PCore extends EventEmitter {
         this.liftBans() // a stranger refused by stealth mode may have just become a member
         this.emitState()
       },
-      message: (roomKey, msg) => this.emit('message', roomKey, msg),
+      message: (roomKey, msg) => {
+        if (!this.expired(msg.ts)) this.emit('message', roomKey, msg) // an old message arriving with a late sync
+      },
       messageDeleted: (roomKey, id, author) => this.deleted(roomKey, id, author),
       messageAnnotated: (roomKey, a) => this.annotated(roomKey, a)
     })
@@ -231,6 +244,17 @@ export class P2PCore extends EventEmitter {
     await this.store?.close()
   }
 
+  // Phone app in the background (mobile only, see mobile/worker/core.ts): the OS freezes the worker,
+  // so the connections are closed cleanly first; on resume the DHT and the friends are joined again
+  // (the network may have changed meanwhile: Wi-Fi → 4G, new IP)
+  async suspend(): Promise<void> {
+    await this.swarm?.suspend()
+  }
+
+  async resume(): Promise<void> {
+    await this.swarm?.resume()
+  }
+
   // Master key (hex) for the identity backup: the only secret that cannot be re-created
   getPrimaryKey(): string {
     return b4a.toString(this.store.primaryKey, 'hex')
@@ -250,6 +274,7 @@ export class P2PCore extends EventEmitter {
         key: contact.key,
         name: contact.name,
         avatar: this.avatars.get(contact.key) ?? null,
+        customStatus: contact.customStatus ?? '',
         status: contact.status,
         online: contact.status === 'accepted' && this.peers.has(contact.key),
         callId,
@@ -263,7 +288,8 @@ export class P2PCore extends EventEmitter {
         inviteCode: idEnc.encode(b4a.from(this.publicKey, 'hex')),
         name: this.name,
         named: this.named,
-        avatar: this.avatar
+        avatar: this.avatar,
+        customStatus: this.customStatus
       },
       friends,
       blocked,
@@ -302,9 +328,17 @@ export class P2PCore extends EventEmitter {
     await this.saveProfile()
   }
 
+  // Custom status: one line, shown to my friends under my name ('' removes it)
+  async setCustomStatus(text: string): Promise<void> {
+    const clean = cleanCustomStatus(text) ?? ''
+    if (clean === this.customStatus) return
+    this.customStatus = clean
+    await this.saveProfile()
+  }
+
   // Save + announce to connected peers (new Hello)
   private async saveProfile(): Promise<void> {
-    await this.saveJson('profile.json', { name: this.name, avatar: this.avatar })
+    await this.saveJson('profile.json', { name: this.name, avatar: this.avatar, customStatus: this.customStatus })
     for (const key of this.peers.keys()) await this.sendHello(key)
     this.emitState()
   }
@@ -507,8 +541,26 @@ export class P2PCore extends EventEmitter {
     return this.rooms.decline(roomKey)
   }
 
+  //& Message lifetime: messages older than this many days are no longer shown (0 = keep forever).
+  // A personal, local choice: the logs are append-only and replicated, so the text stays in the logs
+  // (and on the other devices); only the files attached to expired messages are erased (see purgeFiles).
+  private messageTtlDays = 0
+  setMessageTtl(days: number): void {
+    this.messageTtlDays = Number.isSafeInteger(days) && days > 0 ? days : 0
+  }
+
+  private expired(ts: number): boolean {
+    return this.messageTtlDays > 0 && Date.now() - Math.min(ts, Date.now()) > this.messageTtlDays * 86_400_000
+  }
+
   //& Conversations: convId = key of a friend OR of a room
+  // What the windows see: without the expired messages
   async getHistory(convId: string): Promise<ChatMessage[]> {
+    return (await this.fullHistory(convId)).filter((msg) => !this.expired(msg.ts))
+  }
+
+  // Every message of the logs (the purge needs the expired ones to free their files)
+  private async fullHistory(convId: string): Promise<ChatMessage[]> {
     if (this.rooms.has(convId)) return this.rooms.getHistory(convId)
     const messages: ChatMessage[] = []
     const annotations: Annotation[] = [] // edits and reactions, applied once both logs are read
@@ -621,7 +673,7 @@ export class P2PCore extends EventEmitter {
     const room = this.rooms.has(convId)
     if (!room && this.contacts.get(convId)?.status !== 'accepted') return
     const now = Date.now()
-    for (const msg of await this.getHistory(convId)) {
+    for (const msg of await this.fullHistory(convId)) {
       const file = msg.file
       if (msg.from !== this.publicKey || !file || file.gone || !isTransfer(file) || this.releasing.has(file.core)) continue
       const recipients = room ? this.rooms.recipients(convId, msg.ts, this.publicKey) : [convId]
@@ -661,14 +713,17 @@ export class P2PCore extends EventEmitter {
   }
 
   // Frees the blocks of the images that have outlived their delay (the windows hide them by the same rule),
+  // of the files received with an expired message (my own files follow the rules above: others may still want them),
   // and my copy of the files already delivered (or kept FILE_KEEP_DAYS: a recipient may never download them)
   async purgeFiles(): Promise<void> {
     const now = Date.now()
     await this.flushOrphans() // images of messages deleted while we were away
     const sweep = async (convId: string, hours: number): Promise<void> => {
-      if (hours <= 0) return
-      for (const msg of await this.getHistory(convId)) {
-        if (msg.file?.image && now - Math.min(msg.ts, now) > hours * 3_600_000) await this.files.release(msg.file.core)
+      for (const msg of await this.fullHistory(convId)) {
+        if (!msg.file) continue
+        const oldImage = hours > 0 && msg.file.image && now - Math.min(msg.ts, now) > hours * 3_600_000
+        const expiredCopy = msg.from !== this.publicKey && this.expired(msg.ts)
+        if (oldImage || expiredCopy) await this.files.release(msg.file.core)
       }
     }
     for (const c of this.contacts.values()) {
@@ -739,7 +794,12 @@ export class P2PCore extends EventEmitter {
     const contact = this.contacts.get(key)
     const isFriendly = contact?.status === 'accepted' || contact?.status === 'outgoing'
     const myCore = isFriendly ? await this.openMyCore(key) : null
-    const hello: Hello = { name: this.name, avatar: this.avatar, core: myCore ? b4a.toString(myCore.key, 'hex') : null }
+    const hello: Hello = {
+      name: this.name,
+      avatar: this.avatar,
+      status: this.customStatus,
+      core: myCore ? b4a.toString(myCore.key, 'hex') : null
+    }
     peer.hello.send(hello)
   }
 
@@ -764,11 +824,13 @@ export class P2PCore extends EventEmitter {
       // Stranger who sends us their log = friend request
       const pending = [...this.contacts.values()].filter((c) => c.status === 'incoming').length
       if (pending >= MAX_PENDING_REQUESTS) return
-      this.contacts.set(key, { key, name, status: 'incoming', remoteCore })
+      this.contacts.set(key, { key, name, status: 'incoming', remoteCore, customStatus: cleanCustomStatus(msg.status) })
     } else if (contact.status === 'blocked') {
       return
     } else {
       contact.name = name
+      const customStatus = cleanCustomStatus(msg.status)
+      if (customStatus !== undefined) contact.customStatus = customStatus
       if (remoteCore) contact.remoteCore = remoteCore
       // Request sent + they send us their log = they accepted
       if (contact.status === 'outgoing' && remoteCore) contact.status = 'accepted'
@@ -838,7 +900,7 @@ export class P2PCore extends EventEmitter {
   private watchMessages(core: any, friendKey: string, author: string): void {
     watchJournal(core, async (from) => {
       const raws = await readRaw(core, from) // read once, used for the messages AND the deletions
-      for (const msg of messagesOf(raws, author)) this.emit('message', friendKey, msg)
+      for (const msg of messagesOf(raws, author)) if (!this.expired(msg.ts)) this.emit('message', friendKey, msg)
       for (const id of deletedIds(raws, author)) this.deleted(friendKey, id, author)
       for (const a of annotationsOf(raws, author)) this.annotated(friendKey, a)
     })

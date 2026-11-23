@@ -12,7 +12,11 @@ export interface Me {
   name: string
   named: boolean // false until the user has chosen a display name (shows the welcome screen)
   avatar: Avatar
+  customStatus: string // short line under the name, like Discord's custom status ('' = none)
 }
+
+// Longest custom status (Discord's limit too)
+export const MAX_CUSTOM_STATUS = 128
 
 // accepted = friend · outgoing = request sent · incoming = request received
 export type FriendStatus = 'accepted' | 'outgoing' | 'incoming'
@@ -21,6 +25,7 @@ export interface Friend {
   key: string
   name: string
   avatar: Avatar
+  customStatus: string // their own line under their name ('' = none or not received yet)
   status: FriendStatus
   online: boolean
   callId: string // id of the voice "room" shared with this friend (1-to-1 call)
@@ -157,6 +162,7 @@ export interface ChatApi {
   getState: () => Promise<CoreState>
   setName: (name: string) => Promise<void>
   setAvatar: (avatar: Avatar) => Promise<void>
+  setCustomStatus: (text: string) => Promise<void>
   addFriend: (code: string, nickname: string) => Promise<void>
   acceptRequest: (key: string) => Promise<void>
   declineRequest: (key: string) => Promise<void>

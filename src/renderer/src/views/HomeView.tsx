@@ -2,7 +2,7 @@
 // Each room and each friend opens in its own window.
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useCoreStore } from '@/stores/useCoreStore'
-import type { Friend } from '../../../shared/types'
+import { MAX_CUSTOM_STATUS, type Friend } from '../../../shared/types'
 import { Avatar } from '@/components/Avatar'
 import { Icon } from '@/components/Icon'
 import { ContextMenu, MenuItem, type MenuSpot } from '@/components/ContextMenu'
@@ -60,6 +60,49 @@ const NameEditor = ({ name }: { name: string }) => {
   )
 }
 
+//& My custom status, under the name (like Discord): same editing as the name, but '' is allowed (= no status)
+const StatusEditor = ({ status }: { status: string }) => {
+  const { t } = useTranslation()
+  const [editing, setEditing] = useState(false)
+  const cancelled = useRef(false)
+
+  if (!editing) {
+    cancelled.current = false
+    return (
+      <button
+        type="button"
+        className={`home__status ${status ? '' : 'home__status--empty'}`}
+        title={t('home.statusHint')}
+        onClick={() => setEditing(true)}
+      >
+        {status || t('home.statusPlaceholder')}
+      </button>
+    )
+  }
+  const save = (value: string): void => {
+    setEditing(false)
+    if (!cancelled.current && value.trim() !== status) void window.api.setCustomStatus(value.trim())
+  }
+  return (
+    <input
+      className="home__status home__status--editing"
+      defaultValue={status}
+      placeholder={t('settings.statusPlaceholder')}
+      maxLength={MAX_CUSTOM_STATUS}
+      autoFocus
+      onFocus={(e) => e.target.select()}
+      onBlur={(e) => save(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') {
+          cancelled.current = true
+          e.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
 export const HomeView = () => {
   const { t } = useTranslation()
   const me = useCoreStore((s) => s.me)
@@ -79,7 +122,6 @@ export const HomeView = () => {
   const [nickname, setNickname] = useState('')
   const [roomName, setRoomName] = useState('')
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
   // Invite link clicked (junglemesh://add/<code>): we ask for confirmation before adding
   const [invite, setInvite] = useState<string | null>(null)
   const [inviteName, setInviteName] = useState('')
@@ -133,13 +175,6 @@ export const HomeView = () => {
     if (invite) void run(() => window.api.addFriend(invite, inviteName), closeInvite)
   }
 
-  // We copy the LINK (the code alone stays in Settings): one click and the app opens on the friend's side
-  const copyCode = async (): Promise<void> => {
-    await navigator.clipboard.writeText(`junglemesh://add/${me.inviteCode}`)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-
   const addFriend = (e: FormEvent): void => {
     e.preventDefault()
     void run(
@@ -179,9 +214,8 @@ export const HomeView = () => {
         />
         <div className="home__identity">
           <NameEditor name={me.name} />
-          <button type="button" className="home__key" onClick={copyCode} title={me.inviteCode}>
-            {copied ? t('home.linkCopied') : t('home.copyLink')}
-          </button>
+          {/* The invite link moved to Settings › My profile (2026-11-23) */}
+          <StatusEditor status={me.customStatus} />
         </div>
         {/* Isolated gear to the right of the profile */}
         <button
@@ -356,7 +390,10 @@ export const HomeView = () => {
               onContextMenu={openMenu(f.key, f.name, f)}
             >
               <Avatar src={f.avatar} name={f.name} seed={f.key} size={32} status={f.online ? 'online' : 'offline'} />
-              <span className="list__name">{f.name}</span>
+              <span className="list__text">
+                <span className="list__name">{f.name}</span>
+                {f.customStatus && <span className="list__status">{f.customStatus}</span>}
+              </span>
               {f.status === 'outgoing' && <em className="list__pending">{t('home.pending')}</em>}
               {/* Friend calling me: animated phone; already in the call together: speaker */}
               {f.call.includes(f.key) &&

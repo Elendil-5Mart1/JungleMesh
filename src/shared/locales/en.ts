@@ -2,13 +2,24 @@
 // For French: copy this file to fr.ts, translate the values, and register it in i18n.ts
 export const en = {
   "mobile": {
-    "invite": "Invite"
+    "invite": "Invite",
+    "deleteMessageAsk": "Delete this message for everyone?",
+    "removeFriendAsk": "Remove {{name}} from your friends? They will be blocked (Settings › Blocked to undo).",
+    "cancelRequest": "Cancel request",
+    "cancelRequestAsk": "Cancel your friend request to {{name}}?",
+    "kickAsk": "Remove {{name}} from the room?",
+    "deleteChannelAsk": "Delete #{{name}} and its messages for everyone?",
+    "newChannel": "New text channel",
+    "channelName": "Channel name",
+    "roomPicture": "Room picture",
+    "roomPictureHint": "Tap the image to choose one. Every member sees it.",
+    "privacyIntro": "Your friends and the members of your rooms connect to you directly, so they can see your IP address. Text is always encrypted."
   },
   "home": {
     "connecting": "Connecting to the network…",
     "nameHint": "Your display name (editable)",
-    "linkCopied": "> link copied",
-    "copyLink": "> copy my invite link",
+    "statusPlaceholder": "> set a status",
+    "statusHint": "Your status, seen by your friends (editable)",
     "settings": "Settings",
     "inviteReceived": "Invitation received",
     "inviteAsk": "Add <code>{{code}}</code> to your friends?",
@@ -47,12 +58,23 @@ export const en = {
     "name": "Display name",
     "photo": "Profile picture",
     "photoHint": "Click the image to choose one.",
+    "photoHintMobile": "Tap the image to choose one.",
+    "status": "Status",
+    "statusHint": "A short line under your name, seen by your friends (like a Discord status). Leave empty to remove it.",
+    "statusPlaceholder": "What's up?",
     "remove": "Remove",
     "inviteCode": "Invite code",
     "inviteCodeHint": "Give it to a friend so they can add you. It never changes.",
+    "copyLink": "Copy my invite link",
+    "linkCopied": "Link copied ✓",
+    "inviteLinkHint": "The link opens JungleMesh on your friend's side and asks them to add you.",
     "copied": "Copied ✓",
     "copy": "Copy",
     "share": "Share",
+    "messageTtl": "Message lifetime",
+    "messageTtlDays": "days",
+    "messageTtlNever": "Messages are kept forever. Enter a number of days to hide older ones.",
+    "messageTtlHint": "Messages older than {{count}} days are hidden on this device, and the files received with them are erased. Your friends keep their own copy.",
     "toasts": "Windows notifications",
     "toastsHint": "A pop-up at the bottom right when the app is not in the foreground. Badges are always shown.",
     "flash": "Flash the taskbar",
@@ -389,7 +411,8 @@ export const en = {
     "download": "Download",
     "later": "Later",
     "ready": "The update is ready. Restart JungleMesh to install it?",
-    "restart": "Restart now"
+    "restart": "Restart now",
+    "mobileDetail": "The APK opens in your browser; Android asks before installing it over this version. Your account and messages are kept."
   },
   "chat": {
     "sendTo": "Send a message to {{name}}",

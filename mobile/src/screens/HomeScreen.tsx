@@ -2,18 +2,19 @@
 // Mobile counterpart of src/renderer/src/views/HomeView.tsx (same layout, same texts home.*).
 // Differences for a phone: the "+" buttons are real buttons (bigger touch target), and the
 // invite code with its Copy/Share buttons lives in the settings screen (gear).
-import { useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useState } from 'react'
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import * as Clipboard from 'expo-clipboard'
 import { router } from 'expo-router'
 import { Trans, useTranslation } from 'react-i18next'
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg'
-import type { Friend, Room } from '../../../src/shared/types'
+import { MAX_CUSTOM_STATUS, type Friend, type Room } from '../../../src/shared/types'
+import { changeMyAvatar } from '../avatar'
 import { call } from '../bridge'
 import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
+import { ActionSheet, type SheetSpec } from '../components/Sheet'
 import { useCore } from '../store'
 import { colors, fonts, radius, space } from '../theme'
 
@@ -54,6 +55,58 @@ const NameEditor = ({ name }: { name: string }) => {
       returnKeyType="done"
       onEndEditing={(e) => save(e.nativeEvent.text)}
     />
+  )
+}
+
+//& My custom status under the name (like Discord): same editing as the name, '' = no status
+const StatusEditor = ({ status }: { status: string }) => {
+  const { t } = useTranslation()
+  const [editing, setEditing] = useState(false)
+
+  if (!editing) {
+    return (
+      <Pressable onPress={() => setEditing(true)} hitSlop={6} accessibilityLabel={t('home.statusHint')}>
+        <Text style={status ? styles.status : styles.key} numberOfLines={1}>
+          {status || t('home.statusPlaceholder')}
+        </Text>
+      </Pressable>
+    )
+  }
+
+  const save = (value: string) => {
+    setEditing(false)
+    if (value.trim() !== status) void call('setCustomStatus', value.trim())
+  }
+
+  return (
+    <TextInput
+      style={[styles.status, styles.nameEditing]}
+      defaultValue={status}
+      placeholder={t('settings.statusPlaceholder')}
+      placeholderTextColor={colors.textDim}
+      maxLength={MAX_CUSTOM_STATUS}
+      autoFocus
+      returnKeyType="done"
+      onEndEditing={(e) => save(e.nativeEvent.text)}
+    />
+  )
+}
+
+//& New version available (see updates.ts): download in the browser, or hide until the next check
+const UpdateBanner = () => {
+  const { t } = useTranslation()
+  const update = useCore((s) => s.update)
+  const setUpdate = useCore((s) => s.setUpdate)
+  if (!update) return null
+  return (
+    <View style={styles.update}>
+      <Text style={styles.strong}>{t('update.available', { version: update.version })}</Text>
+      <Text style={styles.muted}>{t('update.mobileDetail')}</Text>
+      <View style={styles.buttons}>
+        <Button label={t('update.download')} kind="primary" onPress={() => void Linking.openURL(update.url)} />
+        <Button label={t('update.later')} onPress={() => setUpdate(null)} />
+      </View>
+    </View>
   )
 }
 
@@ -131,20 +184,30 @@ const InlineForm = ({ placeholder, submitLabel, onSubmit, code }: InlineFormProp
 interface RowProps {
   avatar: React.ReactNode
   name: string
+  sub?: string // custom status of a friend, under the name
   note?: string // "joining…", "pending"
   onPress?: () => void
+  onLongPress?: () => void // the menu (the desktop's right click)
 }
 
-const Row = ({ avatar, name, note, onPress }: RowProps) => (
+const Row = ({ avatar, name, sub, note, onPress, onLongPress }: RowProps) => (
   <Pressable
-    style={({ pressed }) => [styles.item, pressed && !!onPress && styles.itemPressed]}
+    style={({ pressed }) => [styles.item, pressed && (!!onPress || !!onLongPress) && styles.itemPressed]}
     onPress={onPress}
-    disabled={!onPress}
+    onLongPress={onLongPress}
+    disabled={!onPress && !onLongPress}
   >
     {avatar}
-    <Text style={[styles.itemName, !onPress && styles.muted]} numberOfLines={1}>
-      {name}
-    </Text>
+    <View style={styles.itemText}>
+      <Text style={[styles.itemName, !onPress && styles.muted]} numberOfLines={1}>
+        {name}
+      </Text>
+      {!!sub && (
+        <Text style={styles.itemSub} numberOfLines={1}>
+          {sub}
+        </Text>
+      )}
+    </View>
     {!!note && <Text style={styles.note}>{note}</Text>}
   </Pressable>
 )
@@ -155,15 +218,8 @@ export const HomeScreen = () => {
   const state = useCore((s) => s.state)
   const bootError = useCore((s) => s.error)
   const [adding, setAdding] = useState<'friend' | 'room' | null>(null)
-  const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
-
-  // The "copied" mention disappears by itself
-  useEffect(() => {
-    if (!copied) return
-    const timer = setTimeout(() => setCopied(false), 1500)
-    return () => clearTimeout(timer)
-  }, [copied])
+  const [sheet, setSheet] = useState<SheetSpec | null>(null)
 
   if (bootError) {
     return (
@@ -204,11 +260,6 @@ export const HomeScreen = () => {
     setAdding((current) => (current === form ? null : form))
   }
 
-  const copyLink = async () => {
-    await Clipboard.setStringAsync(`junglemesh://add/${me.inviteCode}`)
-    setCopied(true)
-  }
-
   const createRoom = (name: string) =>
     run(async () => {
       const key = await call<string>('createRoom', name)
@@ -224,16 +275,70 @@ export const HomeScreen = () => {
 
   const ignore = (p: Promise<unknown>) => void p.catch(() => {}) // the error is already shown
 
+  // Long press on a friend: message / remove (a request I sent: cancel it), as the desktop's right click
+  const friendMenu = (f: Friend) =>
+    setSheet({
+      title: f.name,
+      actions:
+        f.status === 'accepted'
+          ? [
+              { label: t('menu.openChat'), onPress: () => openChat(f.key) },
+              {
+                label: t('menu.removeFriend'),
+                danger: true,
+                confirm: t('mobile.removeFriendAsk', { name: f.name }),
+                onPress: () => ignore(run(() => call('removeFriend', f.key)))
+              }
+            ]
+          : [
+              {
+                label: t('mobile.cancelRequest'),
+                danger: true,
+                confirm: t('mobile.cancelRequestAsk', { name: f.name }),
+                onPress: () => ignore(run(() => call('removeFriend', f.key)))
+              }
+            ]
+    })
+
+  // Long press on a room: open, its settings (members screen), leave it, or delete it (its creator)
+  const roomMenu = (r: Room) =>
+    setSheet({
+      title: r.name,
+      actions: [
+        { label: t('menu.openRoom'), onPress: () => openRoom(r.key) },
+        { label: t('roomSettings.title'), onPress: () => router.push({ pathname: '/room/[key]/members', params: { key: r.key } }) },
+        r.isOwner
+          ? {
+              label: t('roomSettings.deleteRoom'),
+              danger: true,
+              confirm: t('roomSettings.deleteRoomAsk', { name: r.name }),
+              onPress: () => ignore(run(() => call('deleteRoom', r.key)))
+            }
+          : {
+              label: t('roomSettings.leaveRoom'),
+              danger: true,
+              confirm: t('roomSettings.leaveAsk', { name: r.name }),
+              onPress: () => ignore(run(() => call('leaveRoom', r.key)))
+            }
+      ]
+    })
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       {/*& Profile */}
       <View style={styles.profile}>
-        <Avatar src={me.avatar} name={me.name} size={56} cutout={colors.bgDeep} />
+        {/* My avatar: tap to choose a picture (as a click on the desktop) */}
+        <Pressable
+          onPress={() => ignore(run(changeMyAvatar))}
+          accessibilityLabel={t('settings.photoHintMobile')}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <Avatar src={me.avatar} name={me.name} size={56} cutout={colors.bgDeep} />
+        </Pressable>
         <View style={styles.identity}>
           <NameEditor name={me.name} />
-          <Pressable onPress={copyLink} hitSlop={6}>
-            <Text style={styles.key}>{copied ? t('home.linkCopied') : t('home.copyLink')}</Text>
-          </Pressable>
+          {/* The invite link moved to the settings (gear), 2026-11-23 */}
+          <StatusEditor status={me.customStatus} />
         </View>
         <Pressable
           onPress={() => router.push('/settings')}
@@ -247,6 +352,7 @@ export const HomeScreen = () => {
       <AccentLine />
 
       <ScrollView contentContainerStyle={styles.lists} keyboardShouldPersistTaps="handled">
+        <UpdateBanner />
         {!!error && <Text style={styles.error}>{error}</Text>}
 
         {/*& Friend requests and room invitations */}
@@ -308,6 +414,7 @@ export const HomeScreen = () => {
               name={r.name}
               note={r.status === 'joining' ? t('home.joining') : undefined}
               onPress={() => openRoom(r.key)}
+              onLongPress={() => roomMenu(r)}
             />
           ))}
         </View>
@@ -329,13 +436,16 @@ export const HomeScreen = () => {
               key={f.key}
               avatar={<Avatar src={f.avatar} name={f.name} size={36} status={f.online ? 'online' : 'offline'} />}
               name={f.name}
+              sub={f.customStatus}
               note={f.status === 'outgoing' ? t('home.pending') : undefined}
               // A request I sent is not a conversation yet
               onPress={f.status === 'accepted' ? () => openChat(f.key) : undefined}
+              onLongPress={() => friendMenu(f)}
             />
           ))}
         </View>
       </ScrollView>
+      <ActionSheet spec={sheet} onClose={() => setSheet(null)} />
     </SafeAreaView>
   )
 }
@@ -348,6 +458,16 @@ const styles = StyleSheet.create({
   muted: { color: colors.textMuted },
   strong: { fontWeight: 'bold', color: colors.text },
   error: { color: colors.danger, paddingHorizontal: space * 2, paddingTop: space },
+  update: {
+    margin: space * 2,
+    marginBottom: 0,
+    padding: space * 1.5,
+    gap: space,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: radius,
+    backgroundColor: colors.bgDeep
+  },
 
   //& Profile
   profile: {
@@ -369,6 +489,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2
   },
   key: { color: colors.textMuted, fontFamily: fonts.mono, fontSize: 13 },
+  status: { color: colors.textMuted, fontSize: 14 },
   gear: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
   //& Lists
@@ -422,7 +543,9 @@ const styles = StyleSheet.create({
     borderRadius: radius
   },
   itemPressed: { backgroundColor: colors.bgSoft },
-  itemName: { flex: 1, color: colors.text, fontSize: 16 },
+  itemText: { flex: 1, minWidth: 0 },
+  itemName: { color: colors.text, fontSize: 16 },
+  itemSub: { color: colors.textMuted, fontSize: 13 },
   note: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic' },
 
   request: {

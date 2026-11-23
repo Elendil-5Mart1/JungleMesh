@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useCoreStore } from '@/stores/useCoreStore'
 import { Avatar } from '@/components/Avatar'
+import { MAX_CUSTOM_STATUS } from '../../../shared/types'
 import { Toggle } from '@/components/Toggle'
 import { Icon } from '@/components/Icon'
 import { AudioSettings } from '@/components/AudioSettings'
@@ -65,7 +66,7 @@ export const SettingsView = () => {
   const settings = useCoreStore((s) => s.settings)
 
   const [tab, setTab] = useState<Tab>('profile')
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -78,10 +79,11 @@ export const SettingsView = () => {
     void window.api.setSettings(patch).catch((err) => setError(cleanError(err)))
   }
 
-  const copyCode = async (): Promise<void> => {
-    await navigator.clipboard.writeText(me.inviteCode)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+  // The code alone, or the link (junglemesh://add/<code>: one click and the app opens on the friend's side)
+  const copy = async (what: 'code' | 'link'): Promise<void> => {
+    await navigator.clipboard.writeText(what === 'link' ? `junglemesh://add/${me.inviteCode}` : me.inviteCode)
+    setCopied(what)
+    setTimeout(() => setCopied(null), 1500)
   }
 
   return (
@@ -128,6 +130,19 @@ export const SettingsView = () => {
                     }}
                   />
                 </label>
+                <label className="settings__field">
+                  <span>{t('settings.status')}</span>
+                  <input
+                    defaultValue={me.customStatus}
+                    maxLength={MAX_CUSTOM_STATUS}
+                    placeholder={t('settings.statusPlaceholder')}
+                    onBlur={(e) => {
+                      const text = e.target.value.trim()
+                      if (text !== me.customStatus) void window.api.setCustomStatus(text)
+                    }}
+                  />
+                  <small className="settings__hint">{t('settings.statusHint')}</small>
+                </label>
                 <div className="settings__field">
                   <span>{t('settings.photo')}</span>
                   <div className="settings__row">
@@ -147,9 +162,15 @@ export const SettingsView = () => {
               <p className="settings__hint">{t('settings.inviteCodeHint')}</p>
               <div className="settings__code">
                 <code>{me.inviteCode}</code>
-                <button type="button" onClick={copyCode}>
-                  {copied ? t('settings.copied') : t('settings.copy')}
+                <button type="button" onClick={() => void copy('code')}>
+                  {copied === 'code' ? t('settings.copied') : t('settings.copy')}
                 </button>
+              </div>
+              <div className="settings__row">
+                <button type="button" className="settings__button" onClick={() => void copy('link')}>
+                  {copied === 'link' ? t('settings.linkCopied') : t('settings.copyLink')}
+                </button>
+                <small>{t('settings.inviteLinkHint')}</small>
               </div>
             </div>
           </section>
