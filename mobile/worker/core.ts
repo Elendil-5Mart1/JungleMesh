@@ -7,11 +7,24 @@
 //   worker → UI  { event, args }             a core event (state, message…)
 // The same file is bundled by scripts/build-worker.mjs, which maps node:* to bare-*.
 import b4a from 'b4a'
+import { scryptAsync } from '@noble/hashes/scrypt.js'
 import { readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import {
+  MAX_BACKUP,
+  SCRYPT,
+  applyRestore,
+  checkPassphrase,
+  collectBackup,
+  decryptBackup,
+  encryptBackup,
+  stageRestore,
+  wipeData,
+  type Scrypt
+} from '../../src/main/backup'
 import { P2PCore } from '../../src/main/p2p/core'
-import { setupI18n } from '../../src/shared/i18n'
-import type { ChatMessage, CoreState } from '../../src/shared/types'
+import { setupI18n, t } from '../../src/shared/i18n'
+import { DEFAULT_IMAGE_TTL_HOURS, IMAGE_TTL_CHOICES, type ChatMessage, type CoreState } from '../../src/shared/types'
 import { createUnread } from './unread'
 
 //& What the UI may reach
@@ -52,7 +65,12 @@ const METHODS = new Set([
   'saveFile',
   'confirmReceived',
   'releaseFile',
-  'imageDataUrl'
+  'imageDataUrl',
+  // Calls: the audio goes through WebRTC in the UI (mobile/src/voice), the core only relays presence and signaling
+  'voiceJoin',
+  'voiceLeave',
+  'voiceSignal',
+  'declineCall'
 ])
 
 const EVENTS = [
@@ -72,9 +90,16 @@ export interface MobileSettings {
   checkUpdates: boolean // look for a newer APK on GitHub (see mobile/src/updates.ts), like the desktop's autoUpdate
   stealth: boolean // stealth mode: only friends and room members can connect (P2PCore.setStealth)
   downloadDir: string // content:// URI of the folder where received files are saved ('' = not chosen yet)
+  imageTtlHours: number // shared images erased after this delay in my conversations (0 = never; a room's creator can override it)
 }
 
-const DEFAULT_SETTINGS: MobileSettings = { messageTtlDays: 0, checkUpdates: true, stealth: false, downloadDir: '' }
+const DEFAULT_SETTINGS: MobileSettings = {
+  messageTtlDays: 0,
+  checkUpdates: true,
+  stealth: false,
+  downloadDir: '',
+  imageTtlHours: DEFAULT_IMAGE_TTL_HOURS
+}
 const SETTINGS_FILE = 'mobile-settings.json'
 const PURGE_DELAY_MS = 20_000 // first purge shortly after the start, then every 30 min (as on the desktop)
 const PURGE_EVERY_MS = 30 * 60_000
@@ -89,13 +114,19 @@ const cleanSettings = (raw: any): MobileSettings => {
     downloadDir:
       typeof raw?.downloadDir === 'string' && raw.downloadDir.startsWith('content://') && raw.downloadDir.length < 2000
         ? raw.downloadDir
-        : DEFAULT_SETTINGS.downloadDir
+        : DEFAULT_SETTINGS.downloadDir,
+    // One of the offered choices only (the same list as the desktop)
+    imageTtlHours: IMAGE_TTL_CHOICES.includes(raw?.imageTtlHours) ? raw.imageTtlHours : DEFAULT_SETTINGS.imageTtlHours
   }
 }
 
 // Waiting for the data lock held by the worklet of a reloaded UI: up to 10 s
 const LOCK_ATTEMPTS = 40
 const LOCK_DELAY_MS = 250
+
+// Identity backup: Bare has no scrypt, @noble/hashes (pure JS, audited) gives the same key as the desktop's
+// node:crypto, so a .jmbackup moves between the computer and the phone. asyncTick lets the IPC breathe.
+const scrypt: Scrypt = (password, salt) => scryptAsync(password, salt, { ...SCRYPT, asyncTick: 20 })
 
 // The Bare runtime's global (lifecycle events of the worklet)
 declare const Bare: { on(event: 'suspend' | 'resume', fn: () => void): void }
@@ -121,8 +152,11 @@ export const start = (ipc: any) => {
   let purgeTimer: ReturnType<typeof setInterval> | null = null
   let myKey = '' // known once the core has started (my own messages are not unread)
   let unread: ReturnType<typeof createUnread> | null = null
+  let dataFolder = '' // given by the first init, kept for a restart (restore, reset)
+  let restarting = false
 
   const init = async (dataDir: string) => {
+    dataFolder = dataDir
     // The UI was reloaded by Fast Refresh: the core keeps running (and a 2nd init during
     // the start waits for the same start instead of opening the data twice)
     starting ??= setupI18n()
@@ -164,6 +198,7 @@ export const start = (ipc: any) => {
     settings = cleanSettings({ ...settings, ...patch })
     core?.setMessageTtl(settings.messageTtlDays)
     core?.setStealth(settings.stealth)
+    core?.setImageTtl(settings.imageTtlHours)
     await writeFile(`${settingsPath}.tmp`, JSON.stringify(settings, null, 2))
     await rename(`${settingsPath}.tmp`, settingsPath)
     if (core) void core.purgeFiles().catch(() => {}) // a shorter delay frees the files right away
@@ -185,6 +220,7 @@ export const start = (ipc: any) => {
     for (let attempt = 1; ; attempt++) {
       const candidate = new P2PCore(dataDir)
       candidate.setMessageTtl(settings.messageTtlDays)
+      candidate.setImageTtl(settings.imageTtlHours)
       candidate.setStealth(settings.stealth) // before the swarm starts: its firewall reads it
       for (const name of EVENTS) candidate.on(name, (...args: unknown[]) => send({ event: name, args }))
       candidate.on('message', (convId: string, msg: ChatMessage) => unread?.onMessage(convId, msg))
@@ -200,6 +236,61 @@ export const start = (ipc: any) => {
     }
   }
 
+  //& Backup, restore, new identity, erase everything
+  // The desktop relaunches the whole app to swap the identity files (the core holds them open).
+  // Here the worker is enough: stop the core, change the files while nothing holds them, open it again.
+  // The phone's settings (mobile-settings.json) survive everything except "erase everything".
+  const restart = async (change: (dir: string) => void): Promise<CoreState> => {
+    if (restarting) throw new Error('busy')
+    const current = core
+    if (!current || !dataFolder) throw new Error('core not started')
+    restarting = true
+    try {
+      if (purgeTimer) clearInterval(purgeTimer)
+      purgeTimer = null
+      core = null // calls arriving meanwhile get "core not started"
+      starting = null
+      unread = null // its counters belong to the old identity: a fresh one reads the new unread.json
+      await current.stop()
+      change(dataFolder)
+      return await init(dataFolder)
+    } finally {
+      restarting = false
+    }
+  }
+
+  // The encrypted file's text: the UI writes it into the folder the user chose (see mobile/src/backup.ts)
+  const exportBackup = (passphrase: unknown): Promise<string> => {
+    if (!core) throw new Error('core not started')
+    return encryptBackup(collectBackup(dataFolder, core.getPrimaryKey()), checkPassphrase(passphrase), scrypt)
+  }
+
+  // Wrong passphrase or bad file: decryptBackup throws before anything changes
+  const restoreBackup = async (text: unknown, passphrase: unknown): Promise<CoreState> => {
+    if (typeof text !== 'string' || text.length > MAX_BACKUP) throw new Error(t('backup.invalidFile'))
+    const data = await decryptBackup(text, checkPassphrase(passphrase), scrypt)
+    return restart((dir) => {
+      stageRestore(dir, data)
+      applyRestore(dir) // the same two steps as the desktop, without the relaunch in between
+    })
+  }
+
+  const resetData = (mode: unknown): Promise<CoreState> => {
+    if (mode !== 'identity' && mode !== 'all') throw new Error(`unknown reset: ${mode}`)
+    return restart((dir) => wipeData(dir, mode, [SETTINGS_FILE]))
+  }
+
+  //& Audio player of the chat: the sound (checked by the core: real audio bytes) is written where the UI asked
+  // (its cache), then the app's copy is freed like after a download, as on the desktop. Returns the real type.
+  const audioFile = async (coreKey: unknown, path: unknown): Promise<string> => {
+    if (!core) throw new Error('core not started')
+    const key = String(coreKey)
+    const { mime, bytes } = await core.audioBytes(key)
+    await writeFile(String(path), bytes)
+    void core.releaseFile(key).catch(() => {})
+    return mime
+  }
+
   const handle = async ({ id, method, args = [] }: Request) => {
     try {
       let result: unknown
@@ -210,6 +301,10 @@ export const start = (ipc: any) => {
       else if (method === 'getUnread') result = unread?.get() ?? {}
       else if (method === 'setActive') unread?.setActive(typeof args[0] === 'string' ? args[0] : null)
       else if (method === 'markRead') unread?.markRead(String(args[0]))
+      else if (method === 'exportBackup') result = await exportBackup(args[0])
+      else if (method === 'restoreBackup') result = await restoreBackup(args[0], args[1])
+      else if (method === 'resetData') result = await resetData(args[0])
+      else if (method === 'audioFile') result = await audioFile(args[0], args[1])
       else if (!core) throw new Error('core not started')
       else if (!METHODS.has(method)) throw new Error(`unknown method: ${method}`)
       else result = await (core as any)[method](...args)
@@ -240,7 +335,14 @@ export const start = (ipc: any) => {
     if (!current) return // not started yet: nothing to suspend
     lifecycle = lifecycle.then(() => current.then(step)).catch(() => {})
   }
-  Bare.on('suspend', () => queue((c) => c.suspend()))
+  // A call cannot go on in the background (the swarm is suspended, Android cuts the microphone): we leave
+  // it first, while the connections are still up, so the others see us go instead of a frozen participant
+  Bare.on('suspend', () =>
+    queue(async (c) => {
+      c.voiceLeave()
+      await c.suspend()
+    })
+  )
   Bare.on('resume', () => queue((c) => c.resume()))
 
   // Run by the harness before the worklet exits: close the swarm and the logs cleanly

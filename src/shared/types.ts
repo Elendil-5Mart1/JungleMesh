@@ -18,6 +18,10 @@ export interface Me {
 // Longest custom status (Discord's limit too)
 export const MAX_CUSTOM_STATUS = 128
 
+// Lifetime of shared images (hours; 0 = never): the choices offered, and the default of my conversations
+export const IMAGE_TTL_CHOICES = [1, 24, 72, 168, 720, 0]
+export const DEFAULT_IMAGE_TTL_HOURS = 72
+
 // accepted = friend · outgoing = request sent · incoming = request received
 export type FriendStatus = 'accepted' | 'outgoing' | 'incoming'
 

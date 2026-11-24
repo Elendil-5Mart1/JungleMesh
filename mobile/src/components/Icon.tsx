@@ -3,7 +3,7 @@
 // react-native-svg provides the same elements, capitalised (Svg, Path…).
 // To add an icon: copy its paths from the desktop file, replacing <path> with <Path>.
 import type { ReactNode } from 'react'
-import Svg, { Path } from 'react-native-svg'
+import Svg, { Path, Rect } from 'react-native-svg'
 import { colors } from '../theme'
 
 const ICONS = {
@@ -25,7 +25,43 @@ const ICONS = {
   ),
   // Paperclip and download arrow: drawn inline by the desktop's Composer and FileCard
   attach: <Path d="M20 11.5 12.2 19.3a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />,
-  download: <Path d="M12 4v11M7 11l5 5 5-5M5 20h14" />
+  download: <Path d="M12 4v11M7 11l5 5 5-5M5 20h14" />,
+  // Audio player of the chat (play: the desktop's drawing; pause: two bars)
+  play: <Path d="M7 4.5 19 12 7 19.5z" />,
+  pause: <Path d="M8 5v14M16 5v14" />,
+  // Calls (the desktop's CallControls)
+  mic: (
+    <>
+      <Rect x="9" y="3" width="6" height="11" rx="3" />
+      <Path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" />
+    </>
+  ),
+  micOff: (
+    <>
+      <Path d="M15 9.5V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.6 2.5" />
+      <Path d="M18.5 11a6.5 6.5 0 0 1-.9 3.3M5.5 11a6.5 6.5 0 0 0 10 5.5M12 17.5V21M9 21h6M4 4l16 16" />
+    </>
+  ),
+  headphones: (
+    <>
+      <Path d="M4 17v-4a8 8 0 0 1 16 0v4" />
+      <Rect x="3" y="14" width="4" height="6" rx="1.5" />
+      <Rect x="17" y="14" width="4" height="6" rx="1.5" />
+    </>
+  ),
+  headphonesOff: (
+    <>
+      <Path d="M4 17v-4a8 8 0 0 1 12.5-6.6M19.4 9.8c.4.9.6 2 .6 3.2v4" />
+      <Rect x="3" y="14" width="4" height="6" rx="1.5" />
+      <Rect x="17" y="14" width="4" height="6" rx="1.5" />
+      <Path d="M4 4l16 16" />
+    </>
+  ),
+  volume: <Path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18.2 6.5a7.5 7.5 0 0 1 0 11" />,
+  // Handset without the waves of the desktop's ringing phone (the waves are animated there)
+  phone: (
+    <Path d="M21 16.4v2.9a2 2 0 0 1-2.2 2 18.5 18.5 0 0 1-8-2.9 18.2 18.2 0 0 1-5.6-5.6 18.5 18.5 0 0 1-2.9-8.1A2 2 0 0 1 4.3 2.5h2.9a2 2 0 0 1 2 1.7c.1.9.3 1.7.6 2.5a2 2 0 0 1-.4 2.1L8.2 10a14.7 14.7 0 0 0 5.6 5.6l1.2-1.2a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.5.6a2 2 0 0 1 1.7 2z" />
+  )
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof ICONS

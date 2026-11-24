@@ -30,6 +30,16 @@ const bareModules = {
   }
 }
 
+// Pure-JS packages bundled INTO core.js instead of being left to bare-stow: @noble/hashes is ESM only
+// (scrypt for the identity backup, see worker/core.ts), esbuild turns it into CommonJS with the rest.
+const BUNDLED = /^@noble\/hashes\//
+const bundledPackages = {
+  name: 'bundled-packages',
+  setup(build) {
+    build.onResolve({ filter: BUNDLED }, ({ path }) => ({ path: fileURLToPath(import.meta.resolve(path)) }))
+  }
+}
+
 const options = {
   entryPoints: [`${root}worker/core.ts`],
   outfile: `${root}worker/build/core.js`,
@@ -38,7 +48,7 @@ const options = {
   platform: 'neutral',
   target: 'es2022',
   packages: 'external',
-  plugins: [bareModules],
+  plugins: [bundledPackages, bareModules],
   logLevel: 'info'
 }
 

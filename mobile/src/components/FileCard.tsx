@@ -3,14 +3,17 @@
 //   and it disappears after its lifetime (the room creator's choice, or 3 days as the core's default).
 // - Other file: a card; nothing is transferred until the user taps "Accept and save…", then a progress
 //   bar follows the transfer. The file lands in the download folder chosen once (see files.ts).
-// - No audio player on the phone yet: a sound is a plain file card.
+// - Audio (mp3, ogg, wav, flac, m4a): the same card with a play button; the sound is only fetched on that
+//   tap, then played in the card (components/AudioPlayer). It can still be saved like any file.
 import { useEffect, useState } from 'react'
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import type { File } from 'expo-file-system'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '../../../src/shared/types'
 import { on } from '../bridge'
-import { formatSize, imageDataUrl, saveAttachment } from '../files'
+import { fetchAudio, formatSize, imageDataUrl, saveAttachment } from '../files'
+import { AudioPlayer } from './AudioPlayer'
 import { Button } from './Button'
 import { Icon } from './Icon'
 import { colors, radius, space } from '../theme'
@@ -34,6 +37,9 @@ export const FileCard = ({ file, ts, ttlHours, convId, mine, onLongPress }: File
   const [note, setNote] = useState('')
   const [zoomed, setZoomed] = useState(false)
   const [now, setNow] = useState(() => Date.now())
+  const isAudio = file.mime.startsWith('audio/')
+  const [audio, setAudio] = useState<File | null>(null) // the sound in the cache, once fetched
+  const [audioLoading, setAudioLoading] = useState(false)
 
   // Image lifetime: checked every minute while the conversation is open (the core frees the data itself)
   const expired = file.image && ttlHours > 0 && now - Math.min(ts, now) > ttlHours * 3_600_000
@@ -63,13 +69,27 @@ export const FileCard = ({ file, ts, ttlHours, convId, mine, onLongPress }: File
     }
   }, [file.core, file.image, expired])
 
-  // Progress of a transfer I started (listened to only during the transfer)
+  // Progress of a transfer I started, or of a sound being fetched (listened to only meanwhile)
   useEffect(() => {
-    if (transfer !== 'running') return
+    if (transfer !== 'running' && !audioLoading) return
     return on('file-progress', (key: string, done: number, total: number) => {
       if (key === file.core && total > 0) setProgress(done / total)
     })
-  }, [file.core, transfer])
+  }, [file.core, transfer, audioLoading])
+
+  // "Play": fetches the sound (same progress bar as a download), then the player starts by itself
+  const play = async () => {
+    setNote('')
+    setProgress(null)
+    setAudioLoading(true)
+    try {
+      setAudio(await fetchAudio(file))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAudioLoading(false)
+    }
+  }
 
   const download = async () => {
     setNote('')
@@ -83,7 +103,7 @@ export const FileCard = ({ file, ts, ttlHours, convId, mine, onLongPress }: File
     }
   }
 
-  const bar = transfer === 'running' && (
+  const bar = (transfer === 'running' || audioLoading) && (
     <View style={styles.bar}>
       {/* Not started yet (sender being reached): a dimmed full bar */}
       <View style={[styles.fill, progress === null ? styles.waiting : { width: `${Math.round(progress * 100)}%` }]} />
@@ -143,7 +163,19 @@ export const FileCard = ({ file, ts, ttlHours, convId, mine, onLongPress }: File
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <Icon name="file" size={20} color={colors.textMuted} />
+        {isAudio && !audio && !file.gone ? (
+          <Pressable
+            onPress={() => void play()}
+            disabled={audioLoading}
+            hitSlop={8}
+            accessibilityLabel={t('file.play')}
+            style={({ pressed }) => [styles.play, (pressed || audioLoading) && styles.pressed]}
+          >
+            <Icon name="play" size={18} color={colors.onAccent} />
+          </Pressable>
+        ) : (
+          <Icon name="file" size={20} color={colors.textMuted} />
+        )}
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={2}>
             {file.name}
@@ -154,6 +186,7 @@ export const FileCard = ({ file, ts, ttlHours, convId, mine, onLongPress }: File
           </Text>
         </View>
       </View>
+      {audio && <AudioPlayer file={audio} />}
       {transfer === 'idle' && !file.gone && <Button label={t('file.accept')} onPress={() => void download()} />}
       {file.gone && transfer !== 'done' && <Text style={styles.hint}>{t('file.gone')}</Text>}
       {bar}
@@ -182,6 +215,14 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: space },
   info: { flex: 1, minWidth: 0 },
+  play: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent
+  },
   name: { color: colors.text, fontSize: 15 },
   size: { color: colors.textMuted, fontSize: 12 },
 

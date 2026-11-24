@@ -2,7 +2,7 @@
 import { app, safeStorage } from 'electron'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AppSettings, SoundKind, WindowMaterial } from '../shared/types'
+import { DEFAULT_IMAGE_TTL_HOURS, type AppSettings, type SoundKind, type WindowMaterial } from '../shared/types'
 
 // The three native WebRTC microphone settings (toggles)
 const AUDIO_FLAGS = ['echoCancellation', 'noiseSuppression', 'autoGainControl'] as const
@@ -35,7 +35,7 @@ const DEFAULTS: AppSettings = {
   contentProtection: false,
   autoUpdate: true,
   autoEmbeds: false,
-  imageTtlHours: 72
+  imageTtlHours: DEFAULT_IMAGE_TTL_HOURS
 }
 
 // A relay is only written turn:… or turns:… (nothing else is accepted, even in a hand-edited file)

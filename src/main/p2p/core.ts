@@ -21,7 +21,7 @@ import c from 'compact-encoding'
 import idEnc from 'hypercore-id-encoding'
 import b4a from 'b4a'
 import type { Avatar, ChannelKind, ChatMessage, BlockedContact, CoreState, Friend, FriendStatus } from '../../shared/types'
-import { MAX_CUSTOM_STATUS } from '../../shared/types'
+import { DEFAULT_IMAGE_TTL_HOURS, MAX_CUSTOM_STATUS } from '../../shared/types'
 import {
   cleanAvatar,
   cleanFileName,
@@ -707,7 +707,7 @@ export class P2PCore extends EventEmitter {
 
   //& Image lifetime: a shared image disappears after a delay (0 = never).
   // Rooms: the creator's choice, written in the registry; otherwise (and in DMs) my own default.
-  private imageTtlHours = 72
+  private imageTtlHours = DEFAULT_IMAGE_TTL_HOURS
   setImageTtl(hours: number): void {
     this.imageTtlHours = hours
   }

@@ -4,16 +4,19 @@ import { useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { Stack } from 'expo-router/stack'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
+import { IncomingCall } from '../components/IncomingCall'
 import { i18nReady } from '../i18n'
 import { useCore } from '../store'
 import { colors } from '../theme'
 import { watchUpdates } from '../updates'
+import { wireCalls } from '../voice/useCall'
 
 export const RootLayout = () => {
   const boot = useCore((s) => s.boot)
 
   useEffect(() => {
     void i18nReady.then(boot)
+    wireCalls() // calls: signals, participants, background (once for the whole app)
   }, [boot])
 
   // Newer APK on GitHub: shown as a banner on the home screen (never in the Play Store build)
@@ -41,6 +44,7 @@ export const RootLayout = () => {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
       </Stack>
+      <IncomingCall />
     </KeyboardProvider>
   )
 }

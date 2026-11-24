@@ -1,7 +1,7 @@
 //* Welcome screen (first launch): choose a display name and, optionally, a picture
 // Mobile counterpart of src/renderer/src/components/Welcome.tsx. Shown by the home screen as long as
 // no name has been saved (me.named); the name can still be changed later from the home screen.
-// No "I already have a backup" here: backup/restore does not exist on mobile yet.
+// "I already have a backup" restores an identity instead (a .jmbackup from another phone or a computer).
 import { useState } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -11,6 +11,7 @@ import type { Me } from '../../../src/shared/types'
 import { changeMyAvatar } from '../avatar'
 import { call } from '../bridge'
 import { Avatar } from '../components/Avatar'
+import { BackupPanel } from '../components/BackupPanel'
 import { Button } from '../components/Button'
 import { colors, radius, space } from '../theme'
 
@@ -18,6 +19,7 @@ export const WelcomeScreen = ({ me }: { me: Me }) => {
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const [error, setError] = useState('')
+  const [restoring, setRestoring] = useState(false)
 
   // The 'state' event with named = true makes the home screen replace this one
   const start = () => {
@@ -53,6 +55,11 @@ export const WelcomeScreen = ({ me }: { me: Me }) => {
         />
         {!!error && <Text style={styles.error}>{error}</Text>}
         <Button label={t('welcome.start')} kind="primary" onPress={start} disabled={!name.trim()} />
+
+        <Pressable onPress={() => setRestoring(!restoring)} style={({ pressed }) => pressed && styles.pressed}>
+          <Text style={styles.link}>{t('welcome.haveBackup')}</Text>
+        </Pressable>
+        {restoring && <BackupPanel importOnly />}
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -78,5 +85,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space * 1.5,
     paddingVertical: space * 1.25
   },
-  error: { color: colors.danger }
+  error: { color: colors.danger },
+  link: { color: colors.accent, fontSize: 14, textDecorationLine: 'underline', marginTop: space }
 })

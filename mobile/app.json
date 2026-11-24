@@ -21,9 +21,9 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.VIBRATE",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.CAMERA"
       ],
+      "permissions": ["android.permission.RECORD_AUDIO"],
       "adaptiveIcon": {
         "backgroundColor": "#07090d",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -36,6 +36,7 @@
       "./plugins/withCmakeVersion",
       "./plugins/withNoBackup",
       "./plugins/withReleaseSigning",
+      "./plugins/withWebRtcProguard",
       [
         "expo-bare-kit",
         {
@@ -44,7 +45,8 @@
           ]
         }
       ],
-      "expo-router"
+      "expo-router",
+      ["expo-audio", { "recordAudioAndroid": false, "enableBackgroundPlayback": false }]
     ]
   }
 }

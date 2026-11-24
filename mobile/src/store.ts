@@ -13,6 +13,7 @@ export interface MobileSettings {
   checkUpdates: boolean // look for a newer APK on GitHub
   stealth: boolean // only friends and room members can connect
   downloadDir: string // folder chosen for received files (content:// URI), '' = asked on the first save
+  imageTtlHours: number // shared images erased after this delay (0 = never), unless the room's creator chose
 }
 
 interface CoreStore {
@@ -26,6 +27,8 @@ interface CoreStore {
   boot: () => Promise<void>
   loadHistory: (key: string) => Promise<void>
   saveSettings: (patch: Partial<MobileSettings>) => Promise<void>
+  restoreBackup: (text: string, passphrase: string) => Promise<void>
+  resetData: (mode: 'identity' | 'all') => Promise<void>
 }
 
 // The app's private folder (file:///data/user/0/org.junglemesh.app/files/) as a plain path for Bare
@@ -42,6 +45,17 @@ export const useCore = create<CoreStore>((set, get) => {
       const next = change(list)
       return next === list ? s : { messages: { ...s.messages, [key]: next } }
     })
+
+  // The worker restarted the core on other files (restore, new identity, erase everything):
+  // everything the UI kept belongs to the old identity
+  const reload = async (state: CoreState) => {
+    set({
+      state,
+      messages: {},
+      settings: await call<MobileSettings>('getSettings'),
+      unread: await call<UnreadCounts>('getUnread')
+    })
+  }
 
   return {
     state: null,
@@ -90,6 +104,10 @@ export const useCore = create<CoreStore>((set, get) => {
           })
         )
       }
-    }
+    },
+
+    // Wrong passphrase or bad file: the worker throws before changing anything
+    restoreBackup: async (text, passphrase) => reload(await call<CoreState>('restoreBackup', text, passphrase)),
+    resetData: async (mode) => reload(await call<CoreState>('resetData', mode))
   }
 })

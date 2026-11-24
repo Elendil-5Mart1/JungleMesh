@@ -12,6 +12,7 @@ import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfm } from 'micromark-extension-gfm'
 import { gfmFromMarkdown } from 'mdast-util-gfm'
 import type { PhrasingContent, RootContent } from 'mdast'
+import { highlightCode } from '../highlight'
 import { colors, fonts, radius, space } from '../theme'
 
 type Base = StyleProp<TextStyle> // text style of the message, inherited by every block
@@ -22,9 +23,11 @@ const openLink = (url: string) => {
 }
 
 //& Code block with a "Copy" button
-const CodeBlock = ({ value }: { value: string }) => {
+const CodeBlock = ({ value, lang }: { value: string; lang?: string | null }) => {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
+  // Coloured only when the block names a language lowlight knows (```js), as on the desktop
+  const coloured = useMemo(() => highlightCode(lang, value), [lang, value])
 
   const copy = async () => {
     await Clipboard.setStringAsync(value)
@@ -37,7 +40,7 @@ const CodeBlock = ({ value }: { value: string }) => {
       {/* Long lines scroll sideways instead of wrapping (like the desktop) */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <Text style={styles.preText} selectable>
-          {value}
+          {coloured ?? value}
         </Text>
       </ScrollView>
       <Pressable onPress={copy} style={styles.copy} hitSlop={6}>
@@ -133,7 +136,7 @@ const block = (node: RootContent, key: number, base: Base): ReactNode => {
         </View>
       )
     case 'code':
-      return <CodeBlock key={key} value={node.value} />
+      return <CodeBlock key={key} value={node.value} lang={node.lang} />
     case 'thematicBreak':
       return <View key={key} style={styles.hr} />
     case 'table':

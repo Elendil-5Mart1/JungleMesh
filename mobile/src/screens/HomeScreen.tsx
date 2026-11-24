@@ -13,6 +13,7 @@ import { changeMyAvatar } from '../avatar'
 import { call } from '../bridge'
 import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
+import { CallBar } from '../components/CallBar'
 import { Icon } from '../components/Icon'
 import { ActionSheet, type SheetSpec } from '../components/Sheet'
 import { report } from '../report'
@@ -367,6 +368,7 @@ export const HomeScreen = () => {
         </Pressable>
       </View>
       <AccentLine />
+      <CallBar />
 
       <ScrollView contentContainerStyle={styles.lists} keyboardShouldPersistTaps="handled">
         <UpdateBanner />

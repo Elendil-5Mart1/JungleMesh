@@ -1,7 +1,7 @@
 //* Entry point of the Electron main process
 import { app, desktopCapturer, dialog, ipcMain, session, BrowserWindow } from 'electron'
 import { basename, join } from 'node:path'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { AppSettings, Avatar, ChannelKind, ChatMessage, CoreState, ScreenSource, SoundKind } from '../shared/types'
 import { P2PCore } from './p2p/core'
 import { cleanFileName, MAX_INLINE_SIZE } from './p2p/journal'
@@ -11,14 +11,18 @@ import { createSettings } from './settings'
 import { createTray } from './tray'
 import { startUpdater } from './updater'
 import { setupSpellcheck } from './textMenu'
+import { scrypt as nodeScrypt } from 'node:crypto'
 import {
-  MIN_PASSPHRASE,
-  IDENTITY_FILES,
+  MAX_BACKUP,
+  SCRYPT,
+  checkPassphrase,
   applyRestore,
   collectBackup,
   decryptBackup,
   encryptBackup,
-  stageRestore
+  stageRestore,
+  wipeData,
+  type Scrypt
 } from './backup'
 import { setupI18n, t } from '../shared/i18n'
 import { loadSession, saveSession } from './windowState'
@@ -41,23 +45,8 @@ if (profile) app.setPath('userData', join(app.getPath('userData'), `profile-${pr
 //& Wipe ("new identity" / "erase everything"): files cannot be deleted while the
 // P2P core is using them. So the app relaunches with --reset=…, and we delete them here, before anything starts.
 const reset = process.argv.find((a) => a.startsWith('--reset='))?.split('=')[1]
-if (reset === 'identity' || reset === 'all') {
-  const dir = app.getPath('userData')
-  // identity: key, contacts, rooms, caches. We keep the profile (name/avatar), settings and window positions.
-  const identity = IDENTITY_FILES
-  const keep = reset === 'identity' ? new Set(['profile.json', 'settings.json', 'windowState.json']) : null
-  const ours = new Set([...identity, 'profile.json', 'settings.json', 'windowState.json'])
-  if (existsSync(dir)) {
-    for (const name of readdirSync(dir)) {
-      if (!ours.has(name) || keep?.has(name)) continue // never anything other than OUR files (neither test profiles nor Chromium)
-      try {
-        rmSync(join(dir, name), { recursive: true, force: true })
-      } catch (err) {
-        console.error('reset: could not remove', name, err)
-      }
-    }
-  }
-}
+// identity: key, contacts, rooms, caches. "identity" keeps the profile (name/avatar), settings and window positions.
+if (reset === 'identity' || reset === 'all') wipeData(app.getPath('userData'), reset, ['settings.json', 'windowState.json'])
 
 //& Import of a backup: the swap happens here too, before the P2P core opens anything
 applyRestore(app.getPath('userData'))
@@ -460,17 +449,18 @@ const senderWindow = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): B
   BrowserWindow.fromWebContents(e.sender)
 //& Identity backup (encrypted file, see backup.ts)
 const BACKUP_FILTER = [{ name: 'JungleMesh backup', extensions: ['jmbackup'] }]
-const checkPassphrase = (p: unknown): string => {
-  if (typeof p !== 'string' || p.length < MIN_PASSPHRASE) throw new Error(t('backup.tooShort', { min: MIN_PASSPHRASE }))
-  return p
-}
+// Node's native scrypt, in the background (does not freeze the windows for the ~0.1 s it takes)
+const scrypt: Scrypt = (password, salt) =>
+  new Promise((resolve, reject) =>
+    nodeScrypt(password, salt, SCRYPT.dkLen, { ...SCRYPT, maxmem: 128 * 1024 * 1024 }, (err, key) => (err ? reject(err) : resolve(key)))
+  )
 ipcMain.handle('backup:export', async (e, passphrase: unknown) => {
   const pass = checkPassphrase(passphrase)
   const win = senderWindow(e)
   const options = { defaultPath: 'junglemesh.jmbackup', filters: BACKUP_FILTER }
   const { canceled, filePath } = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
   if (canceled || !filePath) return false
-  writeFileSync(filePath, encryptBackup(collectBackup(app.getPath('userData'), core.getPrimaryKey()), pass))
+  writeFileSync(filePath, await encryptBackup(collectBackup(app.getPath('userData'), core.getPrimaryKey()), pass, scrypt))
   return true
 })
 ipcMain.handle('backup:import', async (e, passphrase: unknown) => {
@@ -479,8 +469,8 @@ ipcMain.handle('backup:import', async (e, passphrase: unknown) => {
   const options = { properties: ['openFile' as const], filters: BACKUP_FILTER }
   const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
   if (canceled || !filePaths[0]) return false
-  if (statSync(filePaths[0]).size > 20_000_000) throw new Error(t('backup.invalidFile'))
-  const data = decryptBackup(readFileSync(filePaths[0], 'utf8'), pass) // wrong passphrase or bad file: throws before anything changes
+  if (statSync(filePaths[0]).size > MAX_BACKUP) throw new Error(t('backup.invalidFile'))
+  const data = await decryptBackup(readFileSync(filePaths[0], 'utf8'), pass, scrypt) // wrong passphrase or bad file: throws before anything changes
   const { response } = await dialog.showMessageBox({
     type: 'warning',
     buttons: [t('backup.importConfirm'), t('common.cancel')],

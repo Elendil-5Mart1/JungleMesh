@@ -15,10 +15,6 @@ import { useCore } from './store'
 
 type SharedFile = NonNullable<ChatMessage['file']>
 
-// Lifetime of shared images when the room's creator chose none (and in DMs): the core's own default.
-// Not a phone setting yet (the desktop has Settings › Privacy › Shared images).
-export const DEFAULT_IMAGE_TTL_HOURS = 72
-
 const PHOTO_MAX_SIDE = 2048 // a 12 MP phone photo (4000 px, 5 MB) becomes ~400 KB, plenty for a chat
 
 // file:///data/user/0/… → /data/user/0/… (the worker wants a plain path)
@@ -145,6 +141,44 @@ export const saveAttachment = async (convId: string, file: SharedFile): Promise<
   void call('confirmReceived', convId, file.core).catch(() => {})
   void call('releaseFile', file.core).catch(() => {})
   return true
+}
+
+//& A small text file made by the app (identity backup): into the download folder, through the cache.
+// false = the user backed out of the folder choice
+export const saveTextFile = async (name: string, text: string, mime: string): Promise<boolean> => {
+  const temp = new File(cacheDir('outgoing'), `${Date.now()}-${name}`)
+  try {
+    await temp.write(text)
+    return await copyToDownloads(temp, name, mime)
+  } finally {
+    try {
+      temp.delete()
+    } catch {
+      // never written
+    }
+  }
+}
+
+// A file picked by the user, to read (null = backed out)
+export const pickFile = async (): Promise<File | null> => {
+  const picked = await File.pickFileAsync()
+  return picked.canceled ? null : picked.result
+}
+
+//& Sound for the chat's player: the worker writes it into the cache (after checking it is real audio)
+// and frees the app's copy, as the desktop does. The cache file is deleted when the player goes away.
+const AUDIO_EXT: Record<string, string> = {
+  'audio/mpeg': 'mp3',
+  'audio/ogg': 'ogg',
+  'audio/wav': 'wav',
+  'audio/flac': 'flac',
+  'audio/mp4': 'm4a'
+}
+
+export const fetchAudio = async (file: SharedFile): Promise<File> => {
+  const target = new File(cacheDir('audio'), `${file.core.slice(0, 16)}.${AUDIO_EXT[file.mime] ?? 'audio'}`)
+  await call('audioFile', file.core, plainPath(target))
+  return target
 }
 
 //& Displaying an image of the chat (checked by the core: real image, size limits)

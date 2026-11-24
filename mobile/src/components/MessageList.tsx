@@ -6,9 +6,9 @@ import { useMemo, useState } from 'react'
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import { useTranslation } from 'react-i18next'
-import type { ChatMessage } from '../../../src/shared/types'
+import { DEFAULT_IMAGE_TTL_HOURS, type ChatMessage } from '../../../src/shared/types'
 import { call } from '../bridge'
-import { DEFAULT_IMAGE_TTL_HOURS } from '../files'
+import { useCore } from '../store'
 import { FileCard } from './FileCard'
 import { Markdown } from './Markdown'
 import { ActionSheet, Prompt, type PromptSpec, type SheetSpec } from './Sheet'
@@ -100,7 +100,7 @@ interface MessageListProps {
   myKey?: string
   nameOf: (key: string) => string // author's display name
   empty?: string // shown when there is no message yet
-  imageTtlHours?: number // lifetime of shared images (room creator's choice), 0 = never
+  imageTtlHours?: number // lifetime of shared images (room creator's choice), 0 = never; missing = my own setting
   onReport?: (msg: ChatMessage) => void // "Report" in the menu of the others' messages (see report.ts)
 }
 
@@ -110,10 +110,12 @@ export const MessageList = ({
   myKey,
   nameOf,
   empty,
-  imageTtlHours = DEFAULT_IMAGE_TTL_HOURS,
+  imageTtlHours: roomTtl,
   onReport
 }: MessageListProps) => {
   const { t } = useTranslation()
+  const myTtl = useCore((s) => s.settings?.imageTtlHours ?? DEFAULT_IMAGE_TTL_HOURS)
+  const imageTtlHours = roomTtl ?? myTtl
   const [sheet, setSheet] = useState<SheetSpec | null>(null)
   const [prompt, setPrompt] = useState<PromptSpec | null>(null)
   // The list is "inverted" (newest at the bottom, scrolled there by default): it wants the newest first

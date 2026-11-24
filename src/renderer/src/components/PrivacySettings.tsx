@@ -1,7 +1,7 @@
 //* "Privacy" tab: stealth mode, blocked people and IP protection in voice
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { AppSettings } from '../../../shared/types'
+import { IMAGE_TTL_CHOICES, type AppSettings } from '../../../shared/types'
 import { BackupPanel } from './BackupPanel'
 import { Toggle } from '@/components/Toggle'
 import { Avatar } from '@/components/Avatar'
@@ -9,8 +9,8 @@ import { useCoreStore } from '@/stores/useCoreStore'
 
 const EMPTY: never[] = []
 
-// Choices offered for the lifetime of shared images (hours; 0 = never)
-export const TTL_CHOICES = [1, 24, 72, 168, 720, 0]
+// Choices offered for the lifetime of shared images (shared with the phone)
+export const TTL_CHOICES = IMAGE_TTL_CHOICES
 
 interface Props {
   settings: AppSettings

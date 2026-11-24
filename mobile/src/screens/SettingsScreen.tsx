@@ -1,18 +1,22 @@
 //* Settings (gear of the home screen)
 // My profile (picture, display name, custom status), the invite code with Copy, Copy my invite link and
-// Share (the phone's share sheet: SMS, Signal…), the message lifetime
+// Share (the phone's share sheet: SMS, Signal…), the message lifetime, the download folder, privacy,
+// the identity backup with new identity / erase everything,
 // and the update check (not in the Play Store build: Play handles updates).
 // Mobile counterpart of the "My profile" tab of src/renderer/src/views/SettingsView.tsx.
 import { useEffect, useState } from 'react'
-import { Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { router } from 'expo-router'
 import { Stack } from 'expo-router/stack'
 import * as Clipboard from 'expo-clipboard'
 import { useTranslation } from 'react-i18next'
-import { MAX_CUSTOM_STATUS } from '../../../src/shared/types'
+import { DEFAULT_IMAGE_TTL_HOURS, IMAGE_TTL_CHOICES, MAX_CUSTOM_STATUS } from '../../../src/shared/types'
 import { changeMyAvatar } from '../avatar'
 import { call } from '../bridge'
 import { Avatar } from '../components/Avatar'
+import { BackupPanel } from '../components/BackupPanel'
 import { Button } from '../components/Button'
+import { Choice } from '../components/Choice'
 import { chooseDownloadDir, folderLabel } from '../files'
 import { useCore } from '../store'
 import { colors, fonts, radius, space } from '../theme'
@@ -26,8 +30,10 @@ export const SettingsScreen = () => {
   const blocked = useCore((s) => s.state?.blocked) ?? NOBODY
   const settings = useCore((s) => s.settings)
   const saveSettings = useCore((s) => s.saveSettings)
+  const resetData = useCore((s) => s.resetData)
   const [copied, setCopied] = useState<'code' | 'link' | null>(null)
   const [error, setError] = useState('')
+  const [resetting, setResetting] = useState(false)
   // The field is typed freely, then saved when leaving it ('' or 0 = never)
   const [days, setDays] = useState('')
   useEffect(() => setDays(settings?.messageTtlDays ? String(settings.messageTtlDays) : ''), [settings?.messageTtlDays])
@@ -68,6 +74,21 @@ export const SettingsScreen = () => {
   const saveStatus = (value: string) => {
     if (value.trim() !== me.customStatus) run(() => call('setCustomStatus', value.trim()))
   }
+
+  // New identity / erase everything: the worker restarts the core on a clean folder, then back to the
+  // home screen (after "erase everything", no name is saved any more: it shows the welcome screen)
+  const askReset = (mode: 'identity' | 'all') =>
+    Alert.alert(t(mode === 'identity' ? 'privacy.newIdentityAsk' : 'privacy.eraseAllAsk'), t('mobile.resetDetail'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('privacy.resetConfirm'),
+        style: 'destructive',
+        onPress: () => {
+          setResetting(true)
+          run(() => resetData(mode).then(() => router.dismissTo('/')).finally(() => setResetting(false)))
+        }
+      }
+    ])
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -183,6 +204,33 @@ export const SettingsScreen = () => {
       ))}
       {blocked.length > 0 && <Text style={styles.hint}>{t('privacy.unblockHint')}</Text>}
 
+      {/*& Lifetime of shared images (desktop: Settings › Privacy › Images) */}
+      <Text style={[styles.label, styles.section]}>//{t('privacy.images')}</Text>
+      <Text style={styles.fieldLabel}>{t('privacy.imageTtl')}</Text>
+      <Choice
+        options={IMAGE_TTL_CHOICES.map((hours) => ({ value: hours, label: t(`ttl.${hours}`) }))}
+        value={settings?.imageTtlHours ?? DEFAULT_IMAGE_TTL_HOURS}
+        onChange={(imageTtlHours) => void saveSettings({ imageTtlHours })}
+        disabled={settings === null}
+      />
+      <Text style={styles.hint}>{t('privacy.imageTtlHint')}</Text>
+
+      {/*& Identity backup, new identity, erase everything (desktop: Settings › Privacy) */}
+      <Text style={[styles.label, styles.section]}>//{t('privacy.backup')}</Text>
+      <Text style={styles.hint}>{t('mobile.backupIntro')}</Text>
+      <BackupPanel />
+      <Text style={styles.hint}>{t('mobile.backupOneDevice')}</Text>
+
+      <View style={styles.resetRow}>
+        <Button label={t('privacy.newIdentity')} kind="danger" onPress={() => askReset('identity')} disabled={resetting} />
+      </View>
+      <Text style={styles.hint}>{t('privacy.newIdentityHint')}</Text>
+      <View style={styles.resetRow}>
+        <Button label={t('privacy.eraseAll')} kind="danger" onPress={() => askReset('all')} disabled={resetting} />
+      </View>
+      <Text style={styles.hint}>{t('privacy.eraseAllHint')}</Text>
+      {resetting && <Text style={styles.hint}>{t('mobile.backupWorking')}</Text>}
+
       {!IS_STORE_BUILD && (
         <>
           <Text style={[styles.label, styles.section]}>//{t('privacy.updates')}</Text>
@@ -253,5 +301,6 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space },
   switchLabel: { color: colors.text, flex: 1 },
   row: { flexDirection: 'row', gap: space, flexWrap: 'wrap' },
+  resetRow: { flexDirection: 'row', marginTop: space },
   folder: { flex: 1, minWidth: 120, alignSelf: 'center', color: colors.text, fontFamily: fonts.mono, fontSize: 13 }
 })

@@ -8,11 +8,12 @@ import { router } from 'expo-router'
 import { Stack } from 'expo-router/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
-import type { RoomMember } from '../../../src/shared/types'
+import { IMAGE_TTL_CHOICES, type RoomMember } from '../../../src/shared/types'
 import { pickAvatar } from '../avatar'
 import { call } from '../bridge'
 import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
+import { Choice } from '../components/Choice'
 import { useCore } from '../store'
 import { colors, radius, space } from '../theme'
 
@@ -132,6 +133,24 @@ export const MembersScreen = ({ roomKey }: { roomKey: string }) => {
           <Text style={styles.roomName}>{room.name}</Text>
         )}
       </View>
+
+      {/* Lifetime of the images shared in the room: the creator's choice applies to every member */}
+      <Text style={styles.label}>{t('roomSettings.imageTtl')}</Text>
+      {room.isOwner ? (
+        <Choice<number | null>
+          options={[
+            { value: null, label: t('roomSettings.imageTtlDefault') },
+            ...IMAGE_TTL_CHOICES.map((hours) => ({ value: hours, label: t(`ttl.${hours}`) }))
+          ]}
+          value={room.imageTtl ?? null}
+          onChange={(hours) => void run(() => call('setRoomImageTtl', roomKey, hours))}
+        />
+      ) : (
+        <Text style={styles.name}>
+          {room.imageTtl === undefined ? t('roomSettings.imageTtlDefault') : t(`ttl.${room.imageTtl}`)}
+        </Text>
+      )}
+      <Text style={styles.hint}>{t('roomSettings.imageTtlHint')}</Text>
 
       {/* Members, online first */}
       {[
