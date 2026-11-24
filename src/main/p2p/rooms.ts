@@ -321,6 +321,7 @@ export class RoomManager {
     const rt = this.rooms.get(roomKey)
     if (!rt || rt.saved.status !== 'invited') return
     this.rooms.delete(roomKey)
+    this.closeCores(rt) // only the registry was opened (nothing downloaded for an invitation)
     await this.persist()
     this.host.changed()
   }
@@ -500,6 +501,9 @@ export class RoomManager {
 
     // Registry already on disk, then watching for new entries
     await this.applyRegistry(rt, await readRaw(rt.ownerCore))
+    // The registry already said "deleted" or "removed" (while we were offline): the room is forgotten,
+    // its topic must not be joined again
+    if (!rt.active) return
     watchJournal(rt.ownerCore, async (from) => {
       const raws = await readRaw(rt.ownerCore, from)
       await this.applyRegistry(rt, raws)
@@ -517,6 +521,11 @@ export class RoomManager {
     const me = this.host.me().key
     let dirty = false
     const opened: Member[] = [] // members whose log we just opened (the creator will read their requests there)
+    // My own sign-ups / removals: only the LAST one of the batch counts. Coming back to a room I left
+    // (or was kicked from), the whole registry is read again, old removal included: acting on it right away
+    // made the room vanish at once, and coming back was impossible (bug found on 2026-11-24).
+    const wasJoining = rt.saved.status === 'joining'
+    let removedMe = false
     for (const raw of raws) {
       const entry = raw as Partial<{
         type: string
@@ -583,9 +592,10 @@ export class RoomManager {
         if (member.core === rt.saved.key) rt.saved.owner = member.key
         rt.members.set(member.key, member)
         rt.enrolling.delete(member.key)
-        if (member.key === me && rt.saved.status === 'joining')
-          rt.saved.status = 'joined' // we are signed up!
-        else if (member.key !== me && member.core !== rt.saved.key) {
+        if (member.key === me) {
+          removedMe = false // signed up (again) after a removal
+          if (rt.saved.status === 'joining') rt.saved.status = 'joined' // we are signed up!
+        } else if (member.core !== rt.saved.key) {
           await this.openMemberCore(rt, member)
           opened.push(member)
         }
@@ -598,14 +608,21 @@ export class RoomManager {
         // come back, and every message would then be notified twice. post() and getHistory() hide it.
         rt.members.delete(entry.key)
         rt.removedAt.set(entry.key, ts)
-        if (entry.key === me) {
-          // Removed (or I had left): the room disappears from my app
-          this.dropRoom(rt)
-          await this.persist()
-          this.host.changed()
-          return
-        }
+        if (entry.key === me) removedMe = true // decided after the loop (a later sign-up may cancel it)
         dirty = true
+      }
+    }
+
+    if (removedMe) {
+      if (wasJoining) {
+        // Removal from a previous stay: I asked to come back, the new sign-up has not arrived yet
+        rt.saved.status = 'joining'
+      } else {
+        // Removed (or I had left): the room disappears from my app
+        this.dropRoom(rt)
+        await this.persist()
+        this.host.changed()
+        return
       }
     }
 
@@ -683,6 +700,17 @@ export class RoomManager {
     rt.active = false
     this.rooms.delete(rt.saved.key)
     this.host.swarm.leave(rt.ownerCore.discoveryKey)
+    this.closeCores(rt)
+  }
+
+  // Closes the logs of a forgotten room: otherwise they stay open with their continuous download, and a member
+  // who is also a friend (connection still up) keeps sending us the room's messages until the app restarts.
+  // The creator keeps their own log open: it carries the 'room-delete' entry the members must still receive.
+  private closeCores(rt: RoomRuntime): void {
+    const cores = [...rt.cores.values()]
+    if (rt.saved.owner !== this.host.me().key) cores.push(rt.ownerCore, rt.myCore)
+    rt.cores.clear()
+    for (const core of cores) void core?.close().catch(() => {})
   }
 
   private channelName(kind: ChannelKind, name: unknown): string {

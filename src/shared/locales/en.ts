@@ -414,6 +414,7 @@ export const en = {
     "unblock": "Unblock",
     "unblockHint": "A blocked person cannot connect to you or send you a request. Once unblocked, they can send you a new friend request, or you can add them back with their code: your past conversation comes back.",
     "images": "Shared images",
+    "messageTtlAfter": "Hide messages older than (days)",
     "imageTtl": "Images disappear after",
     "imageTtlHint": "Images shared in your conversations are erased from this device after this delay (rooms can override it: the room's creator decides). A file you saved yourself is never touched.",
     "stealth": "Stealth mode",

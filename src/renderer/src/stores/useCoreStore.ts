@@ -72,6 +72,12 @@ void window.api.getUnread().then(useCoreStore.getState().setUnread)
 window.api.onUnread(useCoreStore.getState().setUnread)
 void window.api.getSettings().then(useCoreStore.getState().setSettings)
 window.api.onSettings(useCoreStore.getState().setSettings)
+// A new message lifetime changes what the history shows (the core filters it): the conversations displayed
+// in this window are re-read. Not at the first load of the settings (prev null): nothing to redo.
+useCoreStore.subscribe((s, prev) => {
+  if (!prev.settings || !s.settings || s.settings.messageTtlDays === prev.settings.messageTtlDays) return
+  for (const key of Object.keys(s.messages)) void s.loadHistory(key)
+})
 // Opacity of the window backgrounds: a CSS variable read by glass() in the styles (live, no reload),
 // and the material as an attribute (the pearly sheen of "Pearl" is pure CSS)
 // (the store changes on every message and every state: the DOM is only touched when the settings object changes)

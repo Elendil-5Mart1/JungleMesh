@@ -35,13 +35,16 @@ const DEFAULTS: AppSettings = {
   contentProtection: false,
   autoUpdate: true,
   autoEmbeds: false,
-  imageTtlHours: DEFAULT_IMAGE_TTL_HOURS
+  imageTtlHours: DEFAULT_IMAGE_TTL_HOURS,
+  messageTtlDays: 0
 }
 
 // A relay is only written turn:… or turns:… (nothing else is accepted, even in a hand-edited file)
 const TURN_URL = /^turns?:[A-Za-z0-9.\-_]+(:\d{1,5})?(\?transport=(udp|tcp))?$/
 const cleanTurn = (v: unknown): string => (typeof v === 'string' && TURN_URL.test(v.trim()) ? v.trim() : '')
 const isHours = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 24 * 365
+// Message lifetime: same limit as the phone (100 years), 0 = forever
+const isDays = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 36_500
 const cleanText = (v: unknown): string => (typeof v === 'string' ? v.slice(0, 200) : '')
 // Window look: never below 30 % (the text would become unreadable on a busy wallpaper)
 const isOpacity = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 30 && (v as number) <= 100
@@ -94,6 +97,7 @@ export const createSettings = (onChange: (settings: AppSettings) => void) => {
     if (typeof saved.autoUpdate === 'boolean') current.autoUpdate = saved.autoUpdate
     if (typeof saved.autoEmbeds === 'boolean') current.autoEmbeds = saved.autoEmbeds
     if (isHours(saved.imageTtlHours)) current.imageTtlHours = saved.imageTtlHours
+    if (isDays(saved.messageTtlDays)) current.messageTtlDays = saved.messageTtlDays
   } catch {
     // no file yet: default values
   }
@@ -157,6 +161,7 @@ export const createSettings = (onChange: (settings: AppSettings) => void) => {
       if (typeof patch.autoUpdate === 'boolean') current.autoUpdate = patch.autoUpdate
       if (typeof patch.autoEmbeds === 'boolean') current.autoEmbeds = patch.autoEmbeds
       if (isHours(patch.imageTtlHours)) current.imageTtlHours = patch.imageTtlHours
+      if (isDays(patch.messageTtlDays)) current.messageTtlDays = patch.messageTtlDays
       unlock()
       save()
       applyAutostart()

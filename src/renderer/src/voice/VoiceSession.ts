@@ -5,6 +5,7 @@
 import type { AppSettings, VoiceSignal } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 import { getVoiceVolume } from '../utils/voiceVolume'
+import { createIceRetry, type IceRetry } from '../../../shared/iceRetry'
 
 // STUN servers: they help two PCs behind routers discover their public address.
 // They see NO audio (just "what is my address?"), but they do see our IP. On the same local network, useless.
@@ -123,6 +124,7 @@ interface Link {
   watching: boolean // I watch their screen
   watchesMe: boolean // they watch mine → I send it to them
   queue: Promise<void> // signals of this participant, handled one after the other (see handleSignal)
+  retry: IceRetry // new path search when the link fails (initiator only)
 }
 
 // Measures the volume of a stream to light the "speaking" indicator
@@ -428,7 +430,8 @@ export class VoiceSession {
       screenView: null,
       watching: false,
       watchesMe: false,
-      queue: Promise.resolve()
+      queue: Promise.resolve(),
+      retry: createIceRetry(pc, () => !this.stopped && this.links.get(key) === link)
     }
     this.links.set(key, link)
     this.setLink(key, 'connecting')
@@ -469,11 +472,12 @@ export class VoiceSession {
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState
       if (s === 'connected') {
+        link.retry.connected()
         this.setLink(key, 'connected')
         this.send(key, this.mediaSignal()) // they now have a link for sure: we tell them
       } else if (s === 'failed') {
         this.setLink(key, 'failed')
-        if (link.initiator) pc.restartIce() // new network path attempt
+        if (link.initiator) link.retry.failed() // new network path attempts (see shared/iceRetry.ts)
       } else if (s === 'connecting' || s === 'new') this.setLink(key, 'connecting')
     }
     return link
@@ -482,6 +486,7 @@ export class VoiceSession {
   private removeLink(key: string): void {
     const link = this.links.get(key)
     if (!link) return
+    link.retry.stop()
     link.pc.close()
     if (link.audio) link.audio.srcObject = null
     if (link.screenAudio) link.screenAudio.srcObject = null

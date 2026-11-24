@@ -139,6 +139,7 @@ export interface AppSettings {
   hideNotificationContent: boolean // Windows toasts without the message text
   contentProtection: boolean // windows do not appear in screenshots / screen sharing
   imageTtlHours: number // default lifetime of shared images in my conversations (0 = never)
+  messageTtlDays: number // messages older than this are hidden on this device, their received files erased (0 = never)
   autoUpdate: boolean // look for new versions on GitHub (it sees our IP); nothing is installed without asking
   autoEmbeds: boolean // YouTube / SoundCloud… players load without a click (the platform then sees our IP)
 }

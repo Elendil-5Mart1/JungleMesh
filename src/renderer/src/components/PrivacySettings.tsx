@@ -27,6 +27,16 @@ export const PrivacySettings = ({ settings, onChange }: Props) => {
 
   const commit = (): void => onChange({ turnUrl: turn.url.trim(), turnUser: turn.user, turnPass: turn.pass })
 
+  // Message lifetime in days: '' (or 0) = keep forever
+  const [days, setDays] = useState(settings.messageTtlDays ? String(settings.messageTtlDays) : '')
+  useEffect(() => setDays(settings.messageTtlDays ? String(settings.messageTtlDays) : ''), [settings.messageTtlDays])
+  const commitDays = (): void => {
+    const value = Number.parseInt(days, 10)
+    const next = Number.isSafeInteger(value) && value > 0 ? Math.min(value, 36_500) : 0
+    setDays(next ? String(next) : '')
+    if (next !== settings.messageTtlDays) onChange({ messageTtlDays: next })
+  }
+
   return (
     <section>
       <h2>{t('settings.tabs.privacy')}</h2>
@@ -71,6 +81,25 @@ export const PrivacySettings = ({ settings, onChange }: Props) => {
         </select>
       </label>
       <p className="settings__hint">{t('privacy.imageTtlHint')}</p>
+
+      {/* Message lifetime (same setting as on the phone): typed freely, saved when leaving the field */}
+      <h3>{t('settings.messageTtl')}</h3>
+      <div className="settings__field">
+        <span>{t('privacy.messageTtlAfter')}</span>
+        <input
+          value={days}
+          inputMode="numeric"
+          placeholder="∞"
+          onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+          onBlur={commitDays}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        />
+      </div>
+      <p className="settings__hint">
+        {settings.messageTtlDays
+          ? t('settings.messageTtlHint', { count: settings.messageTtlDays })
+          : t('settings.messageTtlNever')}
+      </p>
 
       <h3>{t('privacy.embeds')}</h3>
       <Toggle

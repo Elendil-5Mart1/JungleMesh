@@ -19,3 +19,4 @@ scripts/e2e-room.mjs
 scripts/e2e-call.mjs
 scripts/e2e-block.mjs
 scripts/e2e-files.mjs
+scripts/e2e-rooms.mjs

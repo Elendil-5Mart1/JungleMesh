@@ -42,18 +42,22 @@ import {
 const profile = process.argv.find((a) => a.startsWith('--profile='))?.split('=')[1]
 if (profile) app.setPath('userData', join(app.getPath('userData'), `profile-${profile}`))
 
+// A single instance per profile (otherwise two P2P cores with the same identity).
+// Taken FIRST (after the profile folder is known: the lock lives there): a second launch (click on a link…)
+// must never touch the files of the running instance below.
+// (app.exit and not app.quit: quit is asynchronous and would let the code carry on)
+const firstInstance = app.requestSingleInstanceLock()
+if (!firstInstance) app.exit(0)
+
 //& Wipe ("new identity" / "erase everything"): files cannot be deleted while the
 // P2P core is using them. So the app relaunches with --reset=…, and we delete them here, before anything starts.
+// (app.relaunch starts the new instance once the old one has exited: the lock is free again by then)
 const reset = process.argv.find((a) => a.startsWith('--reset='))?.split('=')[1]
 // identity: key, contacts, rooms, caches. "identity" keeps the profile (name/avatar), settings and window positions.
-if (reset === 'identity' || reset === 'all') wipeData(app.getPath('userData'), reset, ['settings.json', 'windowState.json'])
+if (firstInstance && (reset === 'identity' || reset === 'all')) wipeData(app.getPath('userData'), reset, ['settings.json', 'windowState.json'])
 
 //& Import of a backup: the swap happens here too, before the P2P core opens anything
-applyRestore(app.getPath('userData'))
-
-// A single instance per profile (otherwise two P2P cores with the same identity)
-// (app.exit and not app.quit: quit is asynchronous and would let the code carry on)
-if (!app.requestSingleInstanceLock()) app.exit(0)
+if (firstInstance) applyRestore(app.getPath('userData'))
 
 // Windows groups notifications by "AppUserModelId": without it, no toast.
 // In dev we reuse the path of electron.exe (the only id Windows already knows).
@@ -341,12 +345,21 @@ ipcMain.handle('files:audio', async (_e, coreKey: string) => {
 ipcMain.handle('rooms:setImageTtl', (_e, room: string, hours: number | null) => core.setRoomImageTtl(asKey(room), hours))
 core.on('file-progress', (key, done, total) => broadcast('files:progress', key, done, total))
 
-// Voice channels: if the window that is calling closes, we leave the channel (otherwise we stay there as a "ghost")
+// Voice channels: if the window that is calling closes, we leave the channel (otherwise we stay there as a "ghost").
+// One watcher per window, whatever the number of joins (one per join piled up, and Node warned at the 11th).
+// It remembers the window's LAST channel: that is the one to leave if the window closes during the call.
+const voiceWindows = new Map<Electron.WebContents, { room: string; chan: string }>()
 ipcMain.handle('voice:join', (e, room: string, chan: string) => {
   core.voiceJoin(asKey(room), String(chan))
+  const first = !voiceWindows.has(e.sender)
+  voiceWindows.set(e.sender, { room, chan: String(chan) })
+  if (!first) return
   e.sender.once('destroyed', () => {
+    const last = voiceWindows.get(e.sender)
+    voiceWindows.delete(e.sender)
+    if (!last) return
     const state = core.getState()
-    const spot = state.rooms.find((r) => r.key === room)?.voice[chan] ?? state.friends.find((f) => f.callId === room)?.call
+    const spot = state.rooms.find((r) => r.key === last.room)?.voice[last.chan] ?? state.friends.find((f) => f.callId === last.room)?.call
     if (spot?.includes(state.me.publicKey)) core.voiceLeave()
   })
 })
@@ -381,9 +394,15 @@ ipcMain.handle('unread:get', () => notifier.getUnread())
 ipcMain.handle('unread:markRead', (_e, key: string) => notifier.markRead(asKey(key)))
 ipcMain.handle('settings:get', () => settings.get())
 ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
+  const before = settings.get()
   settings.update(patch)
   core.setStealth(settings.get().stealth)
   core.setImageTtl(settings.get().imageTtlHours)
+  core.setMessageTtl(settings.get().messageTtlDays)
+  // A shorter lifetime frees the files right away (the windows re-read their history themselves)
+  if (settings.get().messageTtlDays !== before.messageTtlDays || settings.get().imageTtlHours !== before.imageTtlHours) {
+    void core.purgeFiles().catch((err) => console.error('purge failed', err))
+  }
   // Muting a conversation clears its unread count (otherwise the badge would stay lit)
   for (const key of settings.get().muted) notifier.markRead(key)
   notifier.onState(core.getState(), true) // ringtone turned off / friend muted while ringing: stop it
@@ -559,6 +578,7 @@ app.whenReady().then(async () => {
   setupSpellcheck()
   core.setStealth(settings.get().stealth)
   core.setImageTtl(settings.get().imageTtlHours)
+  core.setMessageTtl(settings.get().messageTtlDays)
   await core.start()
   // Shared images that outlived their delay, and my files already delivered, are erased from the disk:
   // at startup, then every 30 minutes

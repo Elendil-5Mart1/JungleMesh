@@ -9,6 +9,7 @@
 import { mediaDevices, MediaStream, RTCPeerConnection, type RTCRtpTransceiver } from 'react-native-webrtc'
 import { t } from '../../../src/shared/i18n'
 import type { VoiceSignal } from '../../../src/shared/types'
+import { createIceRetry, type IceRetry } from '../../../src/shared/iceRetry'
 import { call } from '../bridge'
 
 // STUN servers, as on the desktop: they tell each side its public address, they never see the audio
@@ -42,6 +43,7 @@ interface Link {
   remote: MediaStream | null // their voice
   queue: Promise<void> // signals of this participant, handled one after the other
   lastLoud: number // last moment their voice was above the threshold
+  retry: IceRetry // new path search when the link fails (initiator only)
 }
 
 export class VoiceSession {
@@ -151,7 +153,15 @@ export class VoiceSession {
 
   private addLink(key: string): Link {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
-    const link: Link = { pc, initiator: this.myKey > key, pendingIce: [], remote: null, queue: Promise.resolve(), lastLoud: 0 }
+    const link: Link = {
+      pc,
+      initiator: this.myKey > key,
+      pendingIce: [],
+      remote: null,
+      queue: Promise.resolve(),
+      lastLoud: 0,
+      retry: createIceRetry(pc, () => !this.stopped && this.links.get(key) === link)
+    }
     this.links.set(key, link)
     this.setLink(key, 'connecting')
     // Microphone = first audio slot. As the initiator, the phone creates nothing else: the computer
@@ -178,10 +188,12 @@ export class VoiceSession {
     })
     pc.addEventListener('connectionstatechange', () => {
       const s = pc.connectionState
-      if (s === 'connected') this.setLink(key, 'connected')
-      else if (s === 'failed') {
+      if (s === 'connected') {
+        link.retry.connected()
+        this.setLink(key, 'connected')
+      } else if (s === 'failed') {
         this.setLink(key, 'failed')
-        if (link.initiator) pc.restartIce() // new network path attempt
+        if (link.initiator) link.retry.failed() // new network path attempts (see src/shared/iceRetry.ts)
       } else if (s === 'connecting' || s === 'new') this.setLink(key, 'connecting')
     })
     return link
@@ -190,6 +202,7 @@ export class VoiceSession {
   private removeLink(key: string): void {
     const link = this.links.get(key)
     if (!link) return
+    link.retry.stop()
     link.pc.close()
     this.links.delete(key)
     const { [key]: _gone, ...links } = this.status.links

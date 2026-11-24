@@ -669,11 +669,12 @@ export class P2PCore extends EventEmitter {
   }
 
   private releasing = new Set<string>() // file logs being freed (a receipt and the periodic sweep can meet)
-  async releaseDelivered(convId: string): Promise<void> {
+  // `history`: the conversation already read by the caller (the periodic purge), so it is not read twice
+  async releaseDelivered(convId: string, history?: ChatMessage[]): Promise<void> {
     const room = this.rooms.has(convId)
     if (!room && this.contacts.get(convId)?.status !== 'accepted') return
     const now = Date.now()
-    for (const msg of await this.fullHistory(convId)) {
+    for (const msg of history ?? (await this.fullHistory(convId))) {
       const file = msg.file
       if (msg.from !== this.publicKey || !file || file.gone || !isTransfer(file) || this.releasing.has(file.core)) continue
       const recipients = room ? this.rooms.recipients(convId, msg.ts, this.publicKey) : [convId]
@@ -718,23 +719,26 @@ export class P2PCore extends EventEmitter {
   async purgeFiles(): Promise<void> {
     const now = Date.now()
     await this.flushOrphans() // images of messages deleted while we were away
+    // Each conversation is read ONCE (its whole history: the most expensive step), then used for both sweeps
     const sweep = async (convId: string, hours: number): Promise<void> => {
-      for (const msg of await this.fullHistory(convId)) {
+      const history = await this.fullHistory(convId)
+      for (const msg of history) {
         if (!msg.file) continue
         const oldImage = hours > 0 && msg.file.image && now - Math.min(msg.ts, now) > hours * 3_600_000
         const expiredCopy = msg.from !== this.publicKey && this.expired(msg.ts)
         if (oldImage || expiredCopy) await this.files.release(msg.file.core)
       }
+      await this.releaseDelivered(convId, history)
     }
-    for (const c of this.contacts.values()) {
-      if (c.status !== 'accepted') continue
-      await sweep(c.key, this.imageTtlHours)
-      await this.releaseDelivered(c.key)
+    // A conversation that fails (log closed meanwhile…) must not stop the purge of the others
+    const safeSweep = (convId: string, hours: number): Promise<void> =>
+      sweep(convId, hours).catch((err) => console.error('purge failed for', convId.slice(0, 8), err))
+    // Copies: the lists can change while we await (friend removed, room left)
+    for (const c of [...this.contacts.values()]) {
+      if (c.status === 'accepted') await safeSweep(c.key, this.imageTtlHours)
     }
     for (const r of this.rooms.getState()) {
-      if (r.status !== 'joined') continue
-      await sweep(r.key, r.imageTtl ?? this.imageTtlHours)
-      await this.releaseDelivered(r.key)
+      if (r.status === 'joined' && this.rooms.has(r.key)) await safeSweep(r.key, r.imageTtl ?? this.imageTtlHours)
     }
   }
 
