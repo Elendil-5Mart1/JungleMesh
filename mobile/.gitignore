@@ -39,5 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+# Gradle output of the local native modules (modules/<name>/android)
+/modules/*/android/build/
+/modules/*/android/.gradle/
 # Bare worker bundled by esbuild
 /worker/build

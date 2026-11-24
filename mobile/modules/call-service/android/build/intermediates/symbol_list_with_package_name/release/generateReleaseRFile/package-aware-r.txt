@@ -1,2 +1,0 @@
-org.junglemesh.callservice
-drawable jm_call_notification

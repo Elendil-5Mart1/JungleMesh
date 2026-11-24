@@ -1,6 +1,6 @@
 {
   "name": "junglemesh",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Peer-to-peer desktop chat with voice, video and screen sharing, no central server",
   "author": "NeuralKink",
   "homepage": "https://github.com/Elendil-5Mart1/JungleMesh",
@@ -98,6 +98,8 @@
       ],
       "artifactName": "JungleMesh-Setup-${version}.${ext}",
       "files": [
+        "out/**/*",
+        "package.json",
         "!**/prebuilds/{android-*,darwin-*,ios-*,linux-*,win32-arm64}/**",
         "!**/node_modules/koffi/build/koffi/!(win32_x64)/**",
         "!**/node_modules/koffi/{src,vendor,doc,lib}/**"
@@ -118,6 +120,8 @@
         }
       },
       "files": [
+        "out/**/*",
+        "package.json",
         "!**/prebuilds/{android-*,darwin-*,ios-*,win32-*,linux-arm64}/**",
         "!**/node_modules/koffi/**"
       ]
@@ -143,6 +147,8 @@
         "NSCameraUsageDescription": "JungleMesh uses the camera for video calls."
       },
       "files": [
+        "out/**/*",
+        "package.json",
         "!**/prebuilds/{android-*,ios-*,linux-*,win32-*}/**",
         "!**/node_modules/koffi/**"
       ]
