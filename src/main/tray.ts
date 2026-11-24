@@ -1,9 +1,9 @@
 //* Icon in the notification area (next to the clock)
 // The app stays connected to the P2P network even when all its windows are closed:
 // we receive messages and notifications, and reopen everything with one click.
-import { app, Menu, Tray, type MenuItemConstructorOptions } from 'electron'
+import { app, Menu, nativeTheme, Tray, type MenuItemConstructorOptions } from 'electron'
 import type { CoreState, UnreadCounts } from '../shared/types'
-import { trayIcon } from './icons'
+import { darkTaskbar, trayIcon } from './icons'
 import { t } from '../shared/i18n'
 
 interface TrayDeps {
@@ -16,14 +16,14 @@ interface TrayDeps {
 }
 
 export const createTray = (deps: TrayDeps) => {
-  const tray = new Tray(trayIcon(false))
+  const tray = new Tray(trayIcon(false, darkTaskbar()))
   tray.on('click', deps.openHome) // left click: the friends list; right click: the menu
 
   // Rebuilds icon, tooltip and menu (called on every friends or unread change)
   const refresh = (): void => {
     const unread = deps.getUnread()
     const total = Object.values(unread).reduce((a, b) => a + b, 0)
-    tray.setImage(trayIcon(total > 0))
+    tray.setImage(trayIcon(total > 0, darkTaskbar()))
     tray.setToolTip(total > 0 ? `JungleMesh · ${t('tray.unread', { count: total })}` : 'JungleMesh')
 
     // Shortcuts to each conversation: ● online, ○ offline, (n) unread
@@ -58,5 +58,6 @@ export const createTray = (deps: TrayDeps) => {
   }
 
   refresh()
+  nativeTheme.on('updated', refresh) // light / dark switch in the system settings: the icon follows
   return { refresh }
 }
