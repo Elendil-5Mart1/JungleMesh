@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["org.junglemesh.callservice.CallServiceModule"]
+  }
+}

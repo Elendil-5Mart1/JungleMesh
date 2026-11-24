@@ -9,12 +9,14 @@ import { useTranslation } from 'react-i18next'
 import { DEFAULT_IMAGE_TTL_HOURS, type ChatMessage } from '../../../src/shared/types'
 import { call } from '../bridge'
 import { useCore } from '../store'
+import { EmojiPicker } from './EmojiPicker'
 import { FileCard } from './FileCard'
+import { Icon } from './Icon'
 import { Markdown } from './Markdown'
 import { ActionSheet, Prompt, type PromptSpec, type SheetSpec } from './Sheet'
 import { colors, radius, space } from '../theme'
 
-// Quick reactions of the long-press menu (the desktop has a full emoji picker)
+// Quick reactions of the long-press menu; the "+" after them opens the full picker (EmojiPicker)
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
 
 const GROUP_MS = 5 * 60_000 // consecutive messages of the same author within 5 min share one header
@@ -118,6 +120,7 @@ export const MessageList = ({
   const imageTtlHours = roomTtl ?? myTtl
   const [sheet, setSheet] = useState<SheetSpec | null>(null)
   const [prompt, setPrompt] = useState<PromptSpec | null>(null)
+  const [pickFor, setPickFor] = useState<ChatMessage | null>(null) // message the full emoji picker reacts to
   // The list is "inverted" (newest at the bottom, scrolled there by default): it wants the newest first
   const newestFirst = useMemo(() => [...messages].reverse(), [messages])
 
@@ -178,6 +181,16 @@ export const MessageList = ({
               <Text style={styles.quickEmoji}>{emoji}</Text>
             </Pressable>
           ))}
+          <Pressable
+            onPress={() => {
+              setSheet(null)
+              setPickFor(msg)
+            }}
+            style={({ pressed }) => [styles.quickBtn, styles.quickMore, pressed && styles.messagePressed]}
+            accessibilityLabel={t('emoji.button')}
+          >
+            <Icon name="plus" size={22} color={colors.textMuted} />
+          </Pressable>
         </View>
       ),
       actions
@@ -216,6 +229,15 @@ export const MessageList = ({
       }}
       />
       <ActionSheet spec={sheet} onClose={() => setSheet(null)} />
+      <EmojiPicker
+        visible={!!pickFor}
+        onClose={() => setPickFor(null)}
+        onPick={(emoji) => {
+          // Picking an emoji I already put takes it back, like a tap on the reaction
+          if (pickFor) react(pickFor, emoji)
+          setPickFor(null)
+        }}
+      />
       <Prompt spec={prompt} onClose={() => setPrompt(null)} />
     </>
   )
@@ -248,5 +270,6 @@ const styles = StyleSheet.create({
   quick: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: space },
   quickBtn: { padding: space, borderRadius: radius },
   quickEmoji: { fontSize: 28 },
+  quickMore: { justifyContent: 'center', alignItems: 'center', borderColor: colors.border, borderWidth: 1 },
   system: { color: colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginVertical: space }
 })

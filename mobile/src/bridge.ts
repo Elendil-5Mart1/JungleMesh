@@ -2,6 +2,8 @@
 // call('setName', 'Alice') sends { id, method, args } to the worker and returns a Promise
 // resolved with its answer. Core events (state, message…) are delivered to on(...) listeners.
 import b4a from 'b4a'
+import { AppState, type AppStateStatus } from 'react-native'
+import { Worklet } from 'react-native-bare-kit'
 import worker from 'expo-bare-kit/workers/worker/index'
 
 type Listener = (...args: any[]) => void
@@ -43,6 +45,26 @@ export const startWorker = (): Promise<void> => {
     })
   })
   return starting
+}
+
+//& Keeping the worker awake in the background (during a call)
+// react-native-bare-kit suspends the worklet by itself when the app goes to the background: it listens to
+// AppState and calls update('background') → suspend() on every worklet. Not Android: a JS decision, so
+// we can override update(). expo-bare-kit does not hand us its worklet, so the override goes on the class
+// (we only have one worker). While a call runs in the background (foreground service), the suspend is
+// skipped; it happens when the call ends, if the app is still in the background.
+let awake = false
+const originalUpdate = Worklet.prototype.update
+Worklet.prototype.update = function (state?: AppStateStatus) {
+  const current = state ?? (AppState.currentState as AppStateStatus) // same default as bare-kit
+  if (awake && current === 'background') return
+  originalUpdate.call(this, current)
+}
+
+export const keepWorkerAwake = (on: boolean): void => {
+  if (awake === on) return
+  awake = on
+  if (!on && AppState.currentState === 'background') Worklet.update('background')
 }
 
 //& Calling the core

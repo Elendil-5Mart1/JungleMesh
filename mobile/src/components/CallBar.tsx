@@ -23,14 +23,21 @@ const personOf = (state: CoreState, key: string, room: string): { name: string; 
 export const CallBar = () => {
   const { t } = useTranslation()
   const state = useCore((s) => s.state)
-  const { spot, status, speaker, error } = useCall()
-  const { leave, setMuted, setDeafened, setSpeaker, clearError } = useCall()
+  const { spot, status, speaker, error, lastSpot } = useCall()
+  const { leave, setMuted, setDeafened, setSpeaker, clearError, rejoin } = useCall()
 
   if (!spot) {
     if (!error) return null
     return (
       <Pressable style={styles.error} onPress={clearError}>
         <Text style={styles.errorText}>{error}</Text>
+        {/* Call cut without hanging up: one tap to get back in */}
+        {lastSpot && (
+          <Pressable onPress={rejoin} hitSlop={6} style={({ pressed }) => [styles.rejoin, pressed && styles.pressed]}>
+            <Icon name="phone" size={14} color={colors.accent} />
+            <Text style={styles.rejoinText}>{t(lastSpot.friendKey ? 'mobile.callBack' : 'mobile.rejoin')}</Text>
+          </Pressable>
+        )}
         <Icon name="close" size={16} color={colors.textMuted} />
       </Pressable>
     )
@@ -180,5 +187,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderRadius: radius
   },
-  errorText: { flex: 1, color: colors.text, fontSize: 13 }
+  errorText: { flex: 1, color: colors.text, fontSize: 13 },
+  rejoin: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space / 2,
+    paddingHorizontal: space,
+    paddingVertical: space / 2,
+    borderRadius: radius,
+    borderColor: colors.accent,
+    borderWidth: 1
+  },
+  rejoinText: { color: colors.accent, fontFamily: fonts.mono, fontSize: 12, fontWeight: 'bold' }
 })

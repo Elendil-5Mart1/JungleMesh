@@ -1,0 +1,9 @@
+org.junglemesh.callservice.call-service-pngs-0 C:\Users\Dhyl\Work\Dev\p2pChatBox\mobile\modules\call-service\android\build\generated\res\pngs\release
+org.junglemesh.callservice.call-service-updated_navigation_xml-1 C:\Users\Dhyl\Work\Dev\p2pChatBox\mobile\modules\call-service\android\build\generated\updated_navigation_xml\release
+org.junglemesh.callservice.call-service-mergeReleaseResources-2 C:\Users\Dhyl\Work\Dev\p2pChatBox\mobile\modules\call-service\android\build\intermediates\incremental\release\mergeReleaseResources\merged.dir
+org.junglemesh.callservice.call-service-mergeReleaseResources-3 C:\Users\Dhyl\Work\Dev\p2pChatBox\mobile\modules\call-service\android\build\intermediates\incremental\release\mergeReleaseResources\stripped.dir
+org.junglemesh.callservice.call-service-release-4 C:\Users\Dhyl\Work\Dev\p2pChatBox\mobile\modules\call-service\android\build\intermediates\merged_res\release\mergeReleaseResources
+org.junglemesh.callservice.call-service-release-5 C:\Users\Dhyl\Work\Dev\p2pChatBox\mobile\modules\call-service\android\build\intermediates\packaged_res\release\packageReleaseResources
+org.junglemesh.callservice.call-service-main-6 C:\Users\Dhyl\Work\Dev\p2pChatBox\mobile\modules\call-service\android\src\main\res
+org.junglemesh.callservice.call-service-release-7 C:\Users\Dhyl\Work\Dev\p2pChatBox\mobile\modules\call-service\android\src\release\res
+gradleHome-0 C:\Users\Dhyl\.gradle

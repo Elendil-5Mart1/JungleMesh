@@ -1,12 +1,14 @@
 //* The call in progress (Zustand): only one at a time for the whole app, like the desktop's voice
 // The phone has a single window: the call must survive moving between screens (chat → home → room),
 // so it lives in a global store and not in a screen's hook (the desktop's useVoice is per window).
-import { AppState, PermissionsAndroid } from 'react-native'
+import { Alert, AppState, BackHandler, PermissionsAndroid, Platform } from 'react-native'
+import { router } from 'expo-router'
 import { create } from 'zustand'
 import InCallManager from 'react-native-incall-manager'
 import type { CoreState, VoiceSignal } from '../../../src/shared/types'
 import { t } from '../../../src/shared/i18n'
-import { call, on } from '../bridge'
+import { call, keepWorkerAwake, on } from '../bridge'
+import { callService } from '../../modules/call-service'
 import { useCore } from '../store'
 import { VoiceSession, type VoiceStatus } from './VoiceSession'
 
@@ -25,7 +27,9 @@ interface CallStore {
   status: VoiceStatus | null
   speaker: boolean // loudspeaker (otherwise the earpiece, or the headset when one is plugged)
   error: string // microphone refused, friend declined… shown in the call bar / chat until dismissed
+  lastSpot: CallSpot | null // call cut without hanging up (declined, removed, background): "Call back / Rejoin"
   join: (spot: CallSpot) => Promise<void>
+  rejoin: () => void
   leave: () => void
   setMuted: (muted: boolean) => void
   setDeafened: (deafened: boolean) => void
@@ -52,6 +56,26 @@ const micAllowed = async (): Promise<boolean> => {
   return (await PermissionsAndroid.request(perm)) === PermissionsAndroid.RESULTS.GRANTED
 }
 
+// Notifications (Android 13+): only for the call's notification. Refused = the call still goes on in the
+// background, its notification just stays out of the shade (task manager only). Asked once, at the first call.
+const askNotifications = async (): Promise<void> => {
+  if (Platform.OS !== 'android' || Platform.Version < 33) return
+  const perm = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+  if (!(await PermissionsAndroid.check(perm))) await PermissionsAndroid.request(perm)
+}
+
+// Foreground service (see modules/call-service): the call survives the background and the locked screen.
+// Started while the app is on screen (Android refuses it from the background); the worker stays awake.
+const startBackground = (spot: CallSpot) => {
+  const started = callService.start(spot.title, t('mobile.callNotifText'), t('room.hangUp'), t('mobile.callChannel'))
+  if (started) keepWorkerAwake(true)
+}
+
+const stopBackground = () => {
+  callService.stop()
+  keepWorkerAwake(false) // back in the background with no call: the worker is suspended now
+}
+
 // Participants of a spot in the core's state (me included)
 export const participantsOf = (state: CoreState | null | undefined, spot: Pick<CallSpot, 'room' | 'chan'>): string[] => {
   if (!state) return []
@@ -76,8 +100,9 @@ export const useCall = create<CallStore>((set, get) => {
       void call('voiceLeave').catch(() => {})
       setRingback(false)
       InCallManager.stop()
+      stopBackground()
     }
-    set({ spot: null, status: null, error })
+    set({ spot: null, status: null, error, lastSpot: null })
   }
 
   return {
@@ -85,12 +110,14 @@ export const useCall = create<CallStore>((set, get) => {
     status: null,
     speaker: false,
     error: '',
+    lastSpot: null,
 
     join: async (spot) => {
       const me = useCore.getState().state?.me.publicKey
       if (!me) return
       if (session?.roomKey === spot.room && session.chanId === spot.chan) return
-      if (!(await micAllowed().catch(() => false))) return set({ error: t('mobile.micDenied') })
+      if (!(await micAllowed().catch(() => false))) return set({ error: t('mobile.micDenied'), lastSpot: null })
+      await askNotifications().catch(() => {})
       stop()
       // 1-to-1 call: held to the ear like a phone call; voice channel: loudspeaker, like Discord
       const speaker = !spot.friendKey
@@ -98,7 +125,7 @@ export const useCall = create<CallStore>((set, get) => {
         if (session === current) set({ status })
       })
       session = current
-      set({ spot, speaker, error: '', status: null })
+      set({ spot, speaker, error: '', lastSpot: null, status: null })
       try {
         await current.start()
       } catch (err) {
@@ -108,7 +135,18 @@ export const useCall = create<CallStore>((set, get) => {
       if (session !== current) return // hung up while the microphone was starting
       InCallManager.start({ media: 'audio' })
       audioMode(speaker)
+      startBackground(spot)
       watchParticipants()
+    },
+
+    // "Call back / Rejoin" after a call was cut. A friend who went offline could not answer.
+    rejoin: () => {
+      const spot = get().lastSpot
+      if (!spot) return
+      set({ error: '', lastSpot: null })
+      const friend = spot.friendKey ? useCore.getState().state?.friends.find((f) => f.key === spot.friendKey) : null
+      if (friend && !friend.online) return set({ error: t('mobile.callFriendOffline', { name: friend.name }) })
+      void get().join(spot)
     },
 
     leave: () => stop(),
@@ -119,9 +157,16 @@ export const useCall = create<CallStore>((set, get) => {
       set({ speaker })
       if (session) audioMode(speaker)
     },
-    clearError: () => set({ error: '' })
+    clearError: () => set({ error: '', lastSpot: null })
   }
 })
+
+// Ends the call without me hanging up: the reason is shown with a "Call back / Rejoin" button
+const cutCall = (error: string) => {
+  const { spot } = useCall.getState()
+  useCall.getState().leave()
+  useCall.setState({ error, lastSpot: spot })
+}
 
 //& Following the participants: the core's state says who is in the call → connections opened / closed
 const watchParticipants = () => {
@@ -134,9 +179,29 @@ const watchParticipants = () => {
   // Call cut by the core (room left, friend removed…): I WAS in the list, and I am no longer.
   // "Was": the state arrives a moment after voiceJoin (it is batched), so right after joining I am not in it yet.
   if (inList) listed = true
-  else if (listed) return useCall.getState().leave()
+  else if (listed) return cutCall(t('mobile.callCut'))
   // 1-to-1 call, alone: a waiting tone until the friend picks up
   setRingback(!!spot.friendKey && inList && keys.length === 1)
+}
+
+// Back button with nowhere to go back to (home screen) during a call: Android would leave the app.
+// We ask: keep the call in the background, or hang up and close. Returns true when handled.
+export const confirmCallExit = (): boolean => {
+  if (!useCall.getState().spot || router.canGoBack()) return false
+  const background = callService.isRunning()
+  Alert.alert(t('mobile.callExitAsk'), t(background ? 'mobile.callExitHint' : 'mobile.callExitHintNoBackground'), [
+    { text: t('common.cancel'), style: 'cancel' },
+    {
+      text: t('mobile.hangUpQuit'),
+      style: 'destructive',
+      onPress: () => {
+        useCall.getState().leave()
+        BackHandler.exitApp()
+      }
+    },
+    ...(background ? [{ text: t('mobile.keepCall'), onPress: () => callService.moveToBack() }] : [])
+  ])
+  return true
 }
 
 // Subscriptions made once for the whole app (see RootLayout)
@@ -154,15 +219,20 @@ export const wireCalls = () => {
     const { spot } = useCall.getState()
     if (spot?.room !== room) return
     const name = useCore.getState().state?.friends.find((f) => f.key === from)?.name ?? from.slice(0, 8)
-    useCall.getState().leave()
-    useCall.setState({ error: t('call.declined', { name }) })
+    cutCall(t('call.declined', { name }))
   })
-  // App sent to the background: the worker suspends the network and Android cuts the microphone,
-  // so we hang up cleanly (a call in the background needs a foreground service, not done yet)
+  // "Hang up" button of the call's notification (app in the background or on screen)
+  callService.onHangup(() => useCall.getState().leave())
+  // Back button on the home screen during a call. Registered here, before the navigation's own listener
+  // (React effects of the root layout run first): the last listener registered is asked first, so the
+  // navigation still goes back between screens, and only "nowhere to go back to" reaches this one.
+  BackHandler.addEventListener('hardwareBackPress', confirmCallExit)
+  // App sent to the background (home button, locked screen): the foreground service keeps the call going.
+  // Without it (refused by Android, or an app built without the module), the worker suspends the network
+  // and Android cuts the microphone, so we hang up cleanly.
   AppState.addEventListener('change', (state) => {
-    if (state === 'background' && useCall.getState().spot) {
-      useCall.getState().leave()
-      useCall.setState({ error: t('mobile.callBackground') })
+    if (state === 'background' && useCall.getState().spot && !callService.isRunning()) {
+      cutCall(t('mobile.callBackground'))
     }
   })
 }
