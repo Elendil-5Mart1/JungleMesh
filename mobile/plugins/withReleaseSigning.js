@@ -2,9 +2,9 @@
 // The key and its passwords never enter the repository: Gradle reads them from the user's own
 // gradle.properties (%USERPROFILE%\.gradle\gradle.properties), see manual.md › "Clé de signature":
 //   JUNGLEMESH_UPLOAD_STORE_FILE=C:/path/to/junglemesh-release.jks   (forward slashes: "\" escapes in this file)
-//   JUNGLEMESH_UPLOAD_STORE_PASSWORD=...
 //   JUNGLEMESH_UPLOAD_KEY_ALIAS=junglemesh
-//   JUNGLEMESH_UPLOAD_KEY_PASSWORD=...
+// and the passwords from user environment variables (Gradle turns ORG_GRADLE_PROJECT_X into the property X):
+//   ORG_GRADLE_PROJECT_JUNGLEMESH_UPLOAD_STORE_PASSWORD, ORG_GRADLE_PROJECT_JUNGLEMESH_UPLOAD_KEY_PASSWORD
 // Without these properties the release build stays signed with the debug key (local tests), and
 // Gradle says so: a debug-signed bundle is refused by the Play Console anyway.
 const { withAppBuildGradle } = require('expo/config-plugins')
