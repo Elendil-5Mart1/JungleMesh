@@ -25,6 +25,8 @@ export const Composer = ({ disabled, placeholder, onSend, attachable }: Composer
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  // A send in progress (YouTube thumbnails downloaded first, a big file copied…): a second Enter would send twice
+  const sendingRef = useRef(false)
 
   // Click outside or Escape closes the picker
   useEffect(() => {
@@ -97,13 +99,16 @@ export const Composer = ({ disabled, placeholder, onSend, attachable }: Composer
   }
 
   const submit = async (): Promise<void> => {
-    if (!text.trim() && staged.length === 0) return
+    if ((!text.trim() && staged.length === 0) || sendingRef.current) return
+    sendingRef.current = true
     try {
       await onSend(text, staged)
       setText('') // cleared only if sending succeeded: we do not lose a long message
       setStaged([])
     } catch {
       // the error is already displayed by the parent, we just keep the text
+    } finally {
+      sendingRef.current = false
     }
   }
 

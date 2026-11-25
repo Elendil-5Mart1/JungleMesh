@@ -71,6 +71,9 @@ export interface Room {
   voice: Record<string, string[]> // voice channel → keys of the people in it (me included)
 }
 
+// YouTube video id → its thumbnail (JPEG data URL), attached to the message by its sender
+export type Thumbs = Record<string, string>
+
 export interface ChatMessage {
   id: string
   from: string // author's public key
@@ -79,6 +82,7 @@ export interface ChatMessage {
   channel?: string // channel of a room ('general' if missing)
   // Attachment (image or other file). receivedBy = recipients who saved it, gone = its sender freed it (plain files)
   file?: { core: string; name: string; size: number; mime: string; image: boolean; receivedBy?: string[]; gone?: boolean }
+  thumbs?: Thumbs // YouTube thumbnails downloaded by the sender (see shared/embeds.ts)
   system?: boolean // informational message ("X joined the room"), not written by a human
   call?: CallEvent // DM call event (system line, its text is built by the window with the author's name)
   edited?: number // date of the last edit by its author (missing = never edited)

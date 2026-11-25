@@ -3,6 +3,8 @@
 // (or when "load players automatically" is on). Each player domain must also be allowed in the CSP
 // (frame-src, renderer/index.html), and YouTube needs a Referer (main/index.ts).
 // Vimeo is left out: its player shows the poster but refuses to play in Electron ("unsupported browser").
+// Shared: the desktop renderer (players), the desktop main process and the mobile app (YouTube thumbnails
+// downloaded by the SENDER and attached to the message, see main/thumbs.ts and mobile/src/thumbs.ts).
 
 export type EmbedProvider = 'youtube' | 'soundcloud' | 'spotify' | 'mixcloud'
 
@@ -13,6 +15,7 @@ export interface Embed {
   autoplay: string // parameter added when the user clicked "play" ('' = the player has none)
   height: number // fixed height in px; 0 = video, sized by its aspect ratio
   vertical?: boolean // YouTube Shorts: 9:16 instead of 16:9
+  videoId?: string // YouTube video (not a playlist): key of its thumbnail in ChatMessage.thumbs
 }
 
 // Names shown on the card (brands: not translated)
@@ -27,7 +30,7 @@ export const PROVIDER_NAMES: Record<EmbedProvider, string> = {
 const MAX_EMBEDS = 3
 
 //& YouTube
-const YT_ID = /^[\w-]{11}$/
+export const YT_ID = /^[\w-]{11}$/
 // Start time: ?t=90, ?t=1m30s, ?t=1h2m3s, ?start=90
 const ytStart = (u: URL): number => {
   const raw = u.searchParams.get('t') ?? u.searchParams.get('start') ?? ''
@@ -54,7 +57,7 @@ const youtube = (u: URL, host: string): Embed | null => {
   // youtube-nocookie: same player, but YouTube does not set its tracking cookies before playback
   const start = ytStart(u)
   const src = `https://www.youtube-nocookie.com/embed/${id}?rel=0${start ? `&start=${start}` : ''}`
-  return { provider: 'youtube', url: u.href, src, autoplay: 'autoplay=1', height: 0, vertical }
+  return { provider: 'youtube', url: u.href, src, autoplay: 'autoplay=1', height: 0, vertical, videoId: id }
 }
 
 //& SoundCloud: the widget takes the public link of the track as is, no ID needed
@@ -127,3 +130,12 @@ export const embedsOf = (text: string): Embed[] => {
   }
   return found
 }
+
+//& YouTube thumbnails attached by the sender
+// mqdefault: 320×180, ~10-20 KB, exists for every video (Shorts included, letterboxed)
+export const MAX_THUMBS = MAX_EMBEDS
+export const ytThumbUrl = (id: string): string => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`
+
+// Videos of a message whose thumbnail the sender downloads (same rules as the players: max 3, not in code)
+export const youtubeIdsOf = (text: string): string[] =>
+  embedsOf(text).flatMap((e) => (e.videoId ? [e.videoId] : [])).slice(0, MAX_THUMBS)

@@ -1,0 +1,57 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* FAQ: native <details>, no script
+.faq {
+  display: flex;
+  flex-direction: column;
+  gap: $space;
+  max-width: 820px;
+  margin-top: $space * 4;
+
+  details {
+    background: $bg;
+    border: 1px solid $border;
+
+    &[open] {
+      border-color: rgba($accent, 0.45);
+
+      summary::after {
+        transform: rotate(45deg);
+      }
+    }
+  }
+
+  summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $space * 2;
+    padding: $space * 2 $space * 2.5;
+    font-weight: 600;
+    list-style: none;
+    cursor: pointer;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &::after {
+      content: '+';
+      color: $accent;
+      font-family: $font-mono;
+      font-size: 1.3rem;
+      font-weight: 400;
+      transition: transform 0.2s;
+    }
+
+    &:hover {
+      color: $accent-bright;
+    }
+  }
+
+  p {
+    padding: 0 $space * 2.5 $space * 2.5;
+    color: $text-muted;
+  }
+}

@@ -1,0 +1,72 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Download cards (one per system; the visitor's own is highlighted and comes first)
+.downloads {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $space * 2;
+  margin-top: $space * 4;
+
+  @include below($bp-tablet) {
+    grid-template-columns: 1fr;
+  }
+
+  &__other {
+    margin-top: $space * 2;
+    color: $text-dim;
+    font-size: 0.9rem;
+  }
+}
+
+.dl {
+  @include cut-card;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: $space * 1.5;
+  padding: $space * 3;
+
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: $space;
+    font-size: 1.25rem;
+  }
+
+  &__sys {
+    margin-top: -$space;
+    color: $text-dim;
+    font-family: $font-mono;
+    font-size: 0.8rem;
+  }
+
+  &__pair {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $space;
+  }
+
+  &__note {
+    color: $text-muted;
+    font-size: 0.9rem;
+  }
+
+  // The visitor's system
+  &--current {
+    order: -1;
+    border-color: rgba($accent, 0.6);
+    box-shadow: inset 0 0 40px rgba($accent, 0.06);
+  }
+}
+
+.tag {
+  padding: 1px $space * 0.75;
+  border: 1px solid rgba($warn, 0.6);
+  color: $warn;
+  font-family: $font-mono;
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

@@ -1,0 +1,53 @@
+name: Landing page
+
+# Builds the landing page (site/) and publishes it on GitHub Pages: https://elendil-5mart1.github.io/JungleMesh/
+# Runs when the page changes on main, or when the app's design variables it reuses change; also on demand.
+# One-time setup in the repository: Settings › Pages › Build and deployment › Source: "GitHub Actions".
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'src/renderer/src/styles/abstracts/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write # publish the page
+  id-token: write # prove to Pages that the upload comes from this workflow
+
+# One deployment at a time; a newer push cancels the one waiting
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

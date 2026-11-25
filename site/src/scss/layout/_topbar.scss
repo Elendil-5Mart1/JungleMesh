@@ -1,0 +1,57 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Sticky header, like the app's title bar
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba($bg-deep, 0.82);
+  border-bottom: 1px solid $line;
+  backdrop-filter: blur(12px);
+
+  &__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+  }
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    gap: $space * 3;
+    font-size: 0.93rem;
+
+    a {
+      color: $text-muted;
+
+      &:hover {
+        color: $text;
+      }
+    }
+
+    @include below($bp-phone) {
+      gap: $space * 2;
+
+      // On a phone: only the essentials
+      a:not(.topbar__github):not([href='#download']) {
+        display: none;
+      }
+    }
+  }
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: $space;
+  color: $text;
+  font-family: $font-mono;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+
+  &:hover {
+    color: $text;
+  }
+}

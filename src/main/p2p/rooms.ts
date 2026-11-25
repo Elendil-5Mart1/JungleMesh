@@ -15,7 +15,7 @@
 // log (room-join) → the creator signs them up in the registry → everyone sees them.
 import { randomUUID } from 'node:crypto'
 import b4a from 'b4a'
-import type { Avatar, Channel, ChannelKind, ChatMessage, Room, RoomStatus } from '../../shared/types'
+import type { Avatar, Channel, ChannelKind, ChatMessage, Room, RoomStatus, Thumbs } from '../../shared/types'
 import { t } from '../../shared/i18n'
 import { annotateAll, type Annotation } from '../../shared/annotations'
 import {
@@ -343,7 +343,7 @@ export class RoomManager {
     return annotateAll(messages.sort((a, b) => a.ts - b.ts), annotations)
   }
 
-  async send(roomKey: string, text: string, channel = GENERAL.id, file?: SharedFile): Promise<void> {
+  async send(roomKey: string, text: string, channel = GENERAL.id, file?: SharedFile, thumbs?: Thumbs): Promise<void> {
     const rt = this.rooms.get(roomKey)
     if (!rt?.myCore || rt.saved.status !== 'joined') {
       throw new Error(t('err.notEnrolledYet'))
@@ -355,7 +355,8 @@ export class RoomManager {
       text: text.slice(0, MAX_MESSAGE_LENGTH),
       ts: Date.now(),
       ...(channel !== GENERAL.id && { channel }), // 'general' is not written (compatibility)
-      ...(file && { file })
+      ...(file && { file }),
+      ...(thumbs && { thumbs }) // already validated by core.send
     }
     await rt.myCore.append(entry)
   }

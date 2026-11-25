@@ -1,0 +1,40 @@
+//* Mixins: the app's (field, label, chamfer…), plus the page's breakpoints
+@forward '../../../../src/renderer/src/styles/abstracts/mixins';
+@use 'variables' as *;
+
+// Below a width (mobile first is not worth it here: the page is mostly single-column anyway)
+@mixin below($bp) {
+  @media (max-width: $bp) {
+    @content;
+  }
+}
+
+// A clip-path cuts the border along with the corner: this draws the 1 px diagonal back
+// (::after of an element in position: relative). $corner: top-right or bottom-right.
+@mixin cut-line($cut, $color, $corner: top-right) {
+  &::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    width: $cut;
+    height: $cut;
+    pointer-events: none;
+
+    @if $corner == top-right {
+      top: -1px;
+      background: linear-gradient(to bottom left, transparent calc(50% - 1px), $color calc(50% - 1px), $color calc(50% + 0.5px), transparent calc(50% + 0.5px));
+    } @else {
+      bottom: -1px;
+      background: linear-gradient(to top left, transparent calc(50% - 1px), $color calc(50% - 1px), $color calc(50% + 0.5px), transparent calc(50% + 0.5px));
+    }
+  }
+}
+
+// Card with the app's chamfered corner (top-right), border included
+@mixin cut-card($cut: 14px) {
+  position: relative;
+  background: $bg;
+  border: 1px solid $border;
+  clip-path: polygon(0 0, calc(100% - #{$cut}) 0, 100% $cut, 100% 100%, 0 100%);
+  @include cut-line($cut, $border);
+}

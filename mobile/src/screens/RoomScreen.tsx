@@ -12,6 +12,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '../../../src/shared/types'
 import { call } from '../bridge'
+import { thumbsOf } from '../thumbs'
 import { sendAnyFile, sendPhoto } from '../files'
 import { report } from '../report'
 import { CallBar } from '../components/CallBar'
@@ -212,7 +213,7 @@ export const RoomScreen = ({ roomKey }: { roomKey: string }) => {
       <Composer
         placeholder={joined && channel ? t('room.sendIn', { name: channel.name }) : t('room.enrolling')}
         disabled={!joined || !channel}
-        onSend={(text) => call('send', roomKey, text, channel?.id)}
+        onSend={async (text) => call('send', roomKey, text, channel?.id ?? null, null, await thumbsOf(text))}
         onAttach={(kind) => (kind === 'photo' ? sendPhoto(roomKey, channel?.id) : sendAnyFile(roomKey, channel?.id))}
       />
       <ActionSheet spec={sheet} onClose={() => setSheet(null)} />

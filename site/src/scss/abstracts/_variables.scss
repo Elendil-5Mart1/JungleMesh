@@ -1,0 +1,9 @@
+//* Design variables: the APP's own (colors, fonts, spacing), plus what only the landing page needs
+// Forwarded from the app so that a color changed in the app changes here too.
+@forward '../../../../src/renderer/src/styles/abstracts/variables';
+
+//& Page only
+$wrap: 1120px; // max width of the content
+$gutter: 20px; // side margin on small screens
+$bp-tablet: 860px; // two columns → one
+$bp-phone: 560px;

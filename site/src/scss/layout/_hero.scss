@@ -1,0 +1,49 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Top of the page: the promise on the left, the drawing of a room on the right
+.hero {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  align-items: center;
+  gap: $space * 7;
+  padding: $space * 10 0 $space * 8;
+
+  @include below($bp-tablet) {
+    grid-template-columns: 1fr;
+    gap: $space * 6;
+    padding-top: $space * 6;
+  }
+
+  h1 {
+    margin: $space * 2 0;
+    font-size: clamp(2.3rem, 5.2vw, 3.6rem);
+    letter-spacing: -0.02em;
+
+    em {
+      display: block;
+      color: $accent;
+      font-style: normal;
+    }
+  }
+
+  &__lead {
+    max-width: 34em;
+    color: $text-muted;
+    font-size: 1.12rem;
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $space * 1.5;
+    margin-top: $space * 4;
+  }
+
+  &__meta {
+    margin-top: $space * 2;
+    color: $text-dim;
+    font-family: $font-mono;
+    font-size: 0.8rem;
+  }
+}

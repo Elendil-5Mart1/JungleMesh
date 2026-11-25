@@ -1,0 +1,49 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Buttons: the app's turquoise "Call" button, chamfered top-right
+.btn {
+  @include chamfer(10px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space;
+  min-height: 46px;
+  padding: 0 $space * 2.5;
+  border: 1px solid transparent;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+
+  small {
+    font-weight: 400;
+    opacity: 0.7;
+  }
+
+  &--primary {
+    background: $accent;
+    color: $on-accent;
+
+    &:hover {
+      background: $accent-bright;
+      color: $on-accent;
+      box-shadow: 0 0 24px rgba($accent, 0.35);
+    }
+  }
+
+  &--ghost {
+    position: relative;
+    background: rgba($accent, 0.06);
+    border-color: rgba($accent, 0.45);
+    color: $accent;
+    @include cut-line(10px, rgba($accent, 0.45));
+
+    &:hover {
+      background: rgba($accent, 0.14);
+      color: $accent-bright;
+    }
+  }
+}

@@ -8,3 +8,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  - package-ecosystem: npm
+    directory: /site # landing page (Vite, Sass, fonts)
+    schedule:
+      interval: weekly

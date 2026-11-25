@@ -24,6 +24,7 @@ import type { Avatar, ChannelKind, ChatMessage, BlockedContact, CoreState, Frien
 import { DEFAULT_IMAGE_TTL_HOURS, MAX_CUSTOM_STATUS } from '../../shared/types'
 import {
   cleanAvatar,
+  cleanThumbs,
   cleanFileName,
   MAX_MESSAGE_LENGTH,
   deletedIds,
@@ -577,8 +578,12 @@ export class P2PCore extends EventEmitter {
     return annotateAll(messages.sort((a, b) => a.ts - b.ts), annotations)
   }
 
-  async send(convId: string, text: string, channel?: string, file?: SharedFile): Promise<void> {
-    if (this.rooms.has(convId)) return this.rooms.send(convId, text, channel, file)
+  // thumbs: YouTube thumbnails downloaded by the sender before the call (desktop main/thumbs.ts, mobile
+  // src/thumbs.ts), validated again here like any received entry. The mobile app passes its arguments
+  // through JSON: a missing channel/file arrives as null, hence the `?? undefined`.
+  async send(convId: string, text: string, channel?: string | null, file?: SharedFile | null, rawThumbs?: unknown): Promise<void> {
+    const thumbs = cleanThumbs(rawThumbs)
+    if (this.rooms.has(convId)) return this.rooms.send(convId, text, channel ?? undefined, file ?? undefined, thumbs)
     const friendKey = convId
     const core = this.myCores.get(friendKey)
     if (!core || this.contacts.get(friendKey)?.status !== 'accepted') {
@@ -586,7 +591,13 @@ export class P2PCore extends EventEmitter {
     }
     // We write to our log; replication takes care of delivery,
     // immediately if the friend is connected, otherwise on their next connection.
-    const entry: JournalEntry = { id: randomUUID(), text: text.slice(0, MAX_MESSAGE_LENGTH), ts: Date.now(), ...(file && { file }) }
+    const entry: JournalEntry = {
+      id: randomUUID(),
+      text: text.slice(0, MAX_MESSAGE_LENGTH),
+      ts: Date.now(),
+      ...(file && { file }),
+      ...(thumbs && { thumbs })
+    }
     await core.append(entry)
   }
 

@@ -9,6 +9,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage, Friend } from '../../../src/shared/types'
 import { call } from '../bridge'
+import { thumbsOf } from '../thumbs'
 import { sendAnyFile, sendPhoto } from '../files'
 import { report } from '../report'
 import { CallBar } from '../components/CallBar'
@@ -87,7 +88,8 @@ export const ChatScreen = ({ friendKey }: { friendKey: string }) => {
 
       <Composer
         placeholder={t('chat.sendTo', { name })}
-        onSend={(text) => call('send', friendKey, text)}
+        // YouTube thumbnails downloaded first (see thumbs.ts); null = no channel, no file (JSON)
+        onSend={async (text) => call('send', friendKey, text, null, null, await thumbsOf(text))}
         onAttach={(kind) => (kind === 'photo' ? sendPhoto(friendKey) : sendAnyFile(friendKey))}
       />
     </KeyboardAvoidingView>

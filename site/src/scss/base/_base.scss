@@ -1,0 +1,108 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Reset + base of the page (the app's reset locks the scroll: a window is a fixed frame, a page is not)
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 72px; // anchors land below the sticky header
+  color-scheme: dark;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background:
+    // A faint mesh of dots, and two glows in the colors of the app
+    radial-gradient(circle at 1px 1px, rgba($text, 0.05) 1px, transparent 0) 0 0 / 28px 28px,
+    radial-gradient(ellipse 60% 40% at 80% 0%, rgba($accent, 0.1), transparent 70%),
+    radial-gradient(ellipse 50% 35% at 0% 30%, rgba($danger, 0.06), transparent 70%),
+    $bg-deep;
+  color: $text;
+  font-family: $font;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+svg {
+  display: block;
+}
+
+a {
+  color: $accent;
+  text-decoration: none;
+
+  &:hover {
+    color: $accent-bright;
+  }
+}
+
+code {
+  padding: 1px 5px;
+  background: $bg-code;
+  border: 1px solid $line;
+  border-radius: $radius;
+  font-family: $font-mono;
+  font-size: 0.88em;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+:focus-visible {
+  outline: 2px solid $accent;
+  outline-offset: 3px;
+}
+
+// Line icons of the app: stroke 1.8, color of the text
+.icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sprite {
+  display: none;
+}
+
+// Centered content column
+.wrap {
+  width: min(100% - #{$gutter * 2}, $wrap);
+  margin-inline: auto;
+}
+
+// "// LABEL" of the app's settings, in turquoise here
+.label {
+  @include label;
+  color: $accent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

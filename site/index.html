@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JungleMesh · peer-to-peer chat for creatives</title>
+    <meta
+      name="description"
+      content="Free, open-source chat that sends your samples, photos and project files straight to your friends, device to device. No server, no compression, no size limit, no account."
+    />
+    <meta name="theme-color" content="#07090d" />
+    <meta property="og:title" content="JungleMesh · share your work at full quality" />
+    <meta property="og:description" content="Peer-to-peer chat for creatives. No server, no compression, no size limit, no account." />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <script type="module" src="./src/main.js"></script>
+  </head>
+  <body>
+    <!--& Icons: same drawings as the app (src/renderer/src/components/Icon.tsx), used with <use href="#i-…"> -->
+    <svg class="sprite" aria-hidden="true">
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5 19 12 7 19.5z" /></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="9.5" r="1.8" /><path d="m3.5 18 5.5-5.5 4 4 2.5-2.5 5 5" /></symbol>
+      <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M4 17v-4a8 8 0 0 1 16 0v4" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /></symbol>
+      <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.5" /><path d="M8 20h8M12 16v4" /></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" /></symbol>
+      <symbol id="i-user-plus" viewBox="0 0 24 24"><circle cx="10" cy="8" r="3.5" /><path d="M3.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6" /></symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18.2 6.5a7.5 7.5 0 0 1 0 11" /></symbol>
+      <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16" /></symbol>
+      <symbol id="i-mesh" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="12" cy="18" r="2" /><path d="M7 6h10M6 7.8l4.9 8.4M18 7.8l-4.9 8.4" /></symbol>
+      <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6c1.6 0 3 .5 4.2 1.2M21 12s-3.5 6-9 6c-1.6 0-3-.5-4.2-1.2M4 4l16 16M9.9 9.9a3 3 0 0 0 4.2 4.2" /></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M4 20h16" /></symbol>
+      <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4 1.3-4-2-6-2.5M15 21v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12 12 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21" /></symbol>
+    </svg>
+
+    <!--& Header -->
+    <header class="topbar">
+      <div class="topbar__inner wrap">
+        <a class="brand" href="#top" aria-label="JungleMesh, back to top">
+          <img src="./icon.svg" alt="" width="28" height="28" />
+          <span>JungleMesh</span>
+        </a>
+        <nav class="topbar__nav" aria-label="Main">
+          <a href="#creatives">Features</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#download">Download</a>
+          <a class="topbar__github" href="https://github.com/Elendil-5Mart1/JungleMesh" aria-label="Source code on GitHub">
+            <svg class="icon"><use href="#i-github" /></svg>
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <!--& Hero -->
+      <section class="hero wrap">
+        <div class="hero__text">
+          <p class="label">free · open source · peer to peer</p>
+          <h1>Share your work <em>at full quality.</em></h1>
+          <p class="hero__lead">
+            JungleMesh is a chat app that sends your samples, photos and project files straight to your friends, device to device.
+            No server in between, no compression, no size limit, no account.
+          </p>
+          <div class="hero__actions">
+            <!-- Text and link filled by main.js from the visitor's system and the latest release -->
+            <a class="btn btn--primary" href="https://github.com/Elendil-5Mart1/JungleMesh/releases/latest" data-hero-download>
+              <svg class="icon"><use href="#i-download" /></svg>
+              <span data-hero-label>Download</span>
+            </a>
+            <a class="btn btn--ghost" href="#download">Other platforms</a>
+          </div>
+          <p class="hero__meta" data-hero-meta>Windows · Linux · Android · MIT license</p>
+        </div>
+
+        <!-- Not a screenshot: a drawing of the app's room window, in HTML (sharp at any size) -->
+        <div class="mock" aria-label="Preview of a JungleMesh room" role="img">
+          <div class="mock__bar">
+            <span class="mock__title"><b>Studio night</b> <span># samples</span></span>
+            <span class="mock__dots" aria-hidden="true"><i></i><i></i></span>
+          </div>
+          <div class="mock__body" aria-hidden="true">
+            <div class="msg">
+              <span class="avatar" style="--hue: 174">N</span>
+              <div class="msg__main">
+                <p class="msg__meta"><b>Nova</b> 21:42</p>
+                <p>new break for the intro, 174 bpm 🔥</p>
+                <div class="card card--audio">
+                  <svg class="icon card__play"><use href="#i-play" /></svg>
+                  <span class="card__info"><b>amen_chop_174.wav</b><small>4.2 MB · lossless</small></span>
+                  <span class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                </div>
+                <p class="pills"><span class="pill pill--mine">🔥 3</span><span class="pill">🎧 2</span></p>
+              </div>
+            </div>
+            <div class="msg">
+              <span class="avatar" style="--hue: 318">K</span>
+              <div class="msg__main">
+                <p class="msg__meta"><b>Kai</b> 21:45</p>
+                <p>cover for the EP, full res</p>
+                <div class="card card--image"><span>cover_final.png · 18.6 MB</span></div>
+              </div>
+            </div>
+            <div class="msg">
+              <span class="avatar" style="--hue: 38">R</span>
+              <div class="msg__main">
+                <p class="msg__meta"><b>Rio</b> 21:51</p>
+                <p>saturday's full set</p>
+                <div class="card card--file">
+                  <svg class="icon"><use href="#i-file" /></svg>
+                  <span class="card__info"><b>liquid_set_2h.flac</b><small>1.4 GB</small></span>
+                  <span class="card__accept">Accept and save…</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mock__composer" aria-hidden="true">Message #samples</div>
+        </div>
+      </section>
+
+      <!--& The basics -->
+      <section class="basics wrap" aria-label="The basics">
+        <article class="basic">
+          <svg class="icon"><use href="#i-code" /></svg>
+          <h2>Open source</h2>
+          <p>Every line of code is public, under the MIT license. Read it, audit it, build it yourself.</p>
+        </article>
+        <article class="basic">
+          <svg class="icon"><use href="#i-mesh" /></svg>
+          <h2>Peer to peer</h2>
+          <p>Messages and files travel directly between devices, encrypted in transit. There is no JungleMesh server to leak, sell or shut down.</p>
+        </article>
+        <article class="basic">
+          <svg class="icon"><use href="#i-eye-off" /></svg>
+          <h2>No data collection</h2>
+          <p>No telemetry, no ads, no analytics. Your history lives on your devices, not in someone's cloud.</p>
+        </article>
+      </section>
+
+      <!--& Creatives -->
+      <section class="section wrap" id="creatives">
+        <p class="label">made for creatives</p>
+        <h2 class="section__title">Built for people who make things</h2>
+        <p class="section__lead">
+          Most chat apps squeeze your photos, re-encode your audio and cap your files. JungleMesh hands them over exactly as you made them.
+        </p>
+        <div class="features">
+          <article class="feature feature--wide">
+            <svg class="icon"><use href="#i-file" /></svg>
+            <h3>Lossless, untouched</h3>
+            <p>WAV, FLAC, RAW, PSD, stems: files arrive byte for byte as you sent them. Nothing is recompressed, nothing is resized.</p>
+          </article>
+          <article class="feature">
+            <svg class="icon"><use href="#i-download" /></svg>
+            <h3>No size limit</h3>
+            <p>A two-hour FLAC set or a zipped project folder goes through. Your friend downloads it straight from your device, piece by piece.</p>
+          </article>
+          <article class="feature">
+            <svg class="icon"><use href="#i-headphones" /></svg>
+            <h3>Listen in the chat</h3>
+            <p>Samples and demos play right in the conversation (MP3, WAV, FLAC, OGG, M4A up to 25 MB). Nothing downloads before you press play.</p>
+          </article>
+          <article class="feature">
+            <svg class="icon"><use href="#i-image" /></svg>
+            <h3>Images at full resolution</h3>
+            <p>Photos show up in the chat in their original quality, up to 25 MB; bigger ones arrive as files. You choose how long they stay: an hour, three days, forever.</p>
+          </article>
+          <article class="feature">
+            <svg class="icon"><use href="#i-play" /></svg>
+            <h3>Your links, without the tracking</h3>
+            <p>
+              SoundCloud, Mixcloud, Spotify and YouTube links turn into players that only load when you click. YouTube previews come from the sender,
+              so the platform never learns who is looking.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!--& Crew -->
+      <section class="section wrap" id="crew">
+        <p class="label">your crew</p>
+        <h2 class="section__title">Rooms, calls and screen sharing</h2>
+        <ul class="list">
+          <li>
+            <svg class="icon"><use href="#i-user-plus" /></svg>
+            <span><b>Invite-only rooms</b> with text and voice channels, for your label, your band or your crew.</span>
+          </li>
+          <li>
+            <svg class="icon"><use href="#i-mic" /></svg>
+            <span><b>Voice and video calls</b>, up to 8 people in a voice channel, with noise suppression.</span>
+          </li>
+          <li>
+            <svg class="icon"><use href="#i-screen" /></svg>
+            <span><b>Screen sharing with sound</b> (Windows), to show a mix, a timeline or a retouch live.</span>
+          </li>
+          <li>
+            <svg class="icon"><use href="#i-code" /></svg>
+            <span><b>Markdown, reactions, edits</b> and code blocks with syntax highlighting.</span>
+          </li>
+        </ul>
+      </section>
+
+      <!--& How it works -->
+      <section class="section wrap" id="start">
+        <p class="label">get started</p>
+        <h2 class="section__title">Three steps, no sign-up</h2>
+        <ol class="steps">
+          <li>
+            <h3>Install and pick a name</h3>
+            <p>No email, no phone number, no password. Your identity is a key pair created on your device.</p>
+          </li>
+          <li>
+            <h3>Send your invite link</h3>
+            <p>Copy it from the app and send it any way you like: <code>junglemesh://add/…</code></p>
+          </li>
+          <li>
+            <h3>Your friend accepts</h3>
+            <p>That's it: chat, share, call. Messages sent while they are away arrive when you are both online.</p>
+          </li>
+        </ol>
+      </section>
+
+      <!--& Privacy -->
+      <section class="section wrap" id="privacy">
+        <p class="label">privacy</p>
+        <h2 class="section__title">Private by design, honest about the limits</h2>
+        <div class="split">
+          <div class="split__col">
+            <h3>What you get</h3>
+            <ul class="checks">
+              <li><b>No account</b>: no phone number, no email, nothing to link back to you.</li>
+              <li><b>Stealth mode</b>: only your friends and room members can see you online.</li>
+              <li><b>Calls through a relay</b> of your choice, to keep your IP address away from the people you call.</li>
+              <li><b>Encrypted backup</b> of your identity, protected by a passphrase.</li>
+              <li><b>Update checks</b> are the only time the app contacts something other than your peers, and you can turn them off.</li>
+            </ul>
+          </div>
+          <div class="split__col split__col--honest">
+            <h3>What peer to peer means</h3>
+            <ul class="caveats">
+              <li><b>Your contacts can see your IP address</b>, as with any direct connection. A VPN hides it for chat.</li>
+              <li><b>You and a friend must be online at the same time</b> at least once to connect.</li>
+              <li><b>A file waits on your device</b> until your friend downloads it, so keep the app running (it lives in the tray).</li>
+              <li><b>Data is not encrypted on disk</b> by the app: use your system's disk encryption.</li>
+              <li><b>Early beta</b>, not audited by a third party yet.</li>
+            </ul>
+            <a class="more" href="https://github.com/Elendil-5Mart1/JungleMesh/blob/main/SECURITY.md">Read the full threat model →</a>
+          </div>
+        </div>
+      </section>
+
+      <!--& Download -->
+      <section class="section wrap" id="download">
+        <p class="label">download</p>
+        <h2 class="section__title">Get JungleMesh</h2>
+        <p class="section__lead" data-release>Latest version, straight from GitHub Releases (each file's SHA-256 is listed there).</p>
+        <div class="downloads">
+          <article class="dl" data-os="windows">
+            <h3>Windows</h3>
+            <p class="dl__sys">Windows 10 / 11, 64-bit</p>
+            <a class="btn btn--primary" data-asset="windows" href="https://github.com/Elendil-5Mart1/JungleMesh/releases/latest">
+              <svg class="icon"><use href="#i-download" /></svg> Installer <small data-size></small>
+            </a>
+            <p class="dl__note">
+              Not code-signed yet: if Windows says <q>Windows protected your PC</q>, click <b>More info</b> then <b>Run anyway</b>. Updates are offered in the app.
+            </p>
+          </article>
+          <article class="dl" data-os="linux">
+            <h3>Linux</h3>
+            <p class="dl__sys">64-bit</p>
+            <div class="dl__pair">
+              <a class="btn btn--primary" data-asset="deb" href="https://github.com/Elendil-5Mart1/JungleMesh/releases/latest">
+                <svg class="icon"><use href="#i-download" /></svg> .deb <small data-size></small>
+              </a>
+              <a class="btn btn--ghost" data-asset="appimage" href="https://github.com/Elendil-5Mart1/JungleMesh/releases/latest">
+                AppImage <small data-size></small>
+              </a>
+            </div>
+            <p class="dl__note">
+              .deb for Ubuntu, Debian, Zorin; AppImage for other distributions (needs FUSE 2).
+              <a href="https://github.com/Elendil-5Mart1/JungleMesh/blob/main/docs/linux-install.md">Install guide</a>
+            </p>
+          </article>
+          <article class="dl" data-os="android">
+            <h3>Android</h3>
+            <p class="dl__sys">64-bit phones (arm64)</p>
+            <a class="btn btn--primary" data-asset="android" href="https://github.com/Elendil-5Mart1/JungleMesh/releases/latest">
+              <svg class="icon"><use href="#i-download" /></svg> APK <small data-size></small>
+            </a>
+            <p class="dl__note">Chat, rooms, files and voice calls. Allow your browser to install apps when Android asks. Updates are offered in the app.</p>
+          </article>
+          <article class="dl dl--soon" data-os="mac">
+            <h3>macOS <span class="tag">experimental</span></h3>
+            <p class="dl__sys">Test builds, not tried on a real Mac yet</p>
+            <div class="dl__pair">
+              <a class="btn btn--ghost" data-asset="macArm" href="https://github.com/Elendil-5Mart1/JungleMesh/releases/latest">Apple silicon <small data-size></small></a>
+              <a class="btn btn--ghost" data-asset="macIntel" href="https://github.com/Elendil-5Mart1/JungleMesh/releases/latest">Intel <small data-size></small></a>
+            </div>
+            <p class="dl__note">Not notarized by Apple: macOS blocks them until you allow them in System Settings › Privacy &amp; Security.</p>
+          </article>
+        </div>
+        <p class="downloads__other">No iPhone version for now.</p>
+      </section>
+
+      <!--& FAQ -->
+      <section class="section wrap" id="faq">
+        <p class="label">faq</p>
+        <h2 class="section__title">Questions</h2>
+        <div class="faq">
+          <details>
+            <summary>Is it really free?</summary>
+            <p>Yes. No premium tier, no ads, no paid features. The code is open source under the MIT license.</p>
+          </details>
+          <details>
+            <summary>Is it secure?</summary>
+            <p>
+              Connections are encrypted end to end (Noise for chat and files, DTLS-SRTP for calls), and there is no server that could read or keep your messages.
+              It is still an early beta that nobody outside the project has audited: the
+              <a href="https://github.com/Elendil-5Mart1/JungleMesh/blob/main/SECURITY.md">security page</a> lists what is protected and what is not.
+            </p>
+          </details>
+          <details>
+            <summary>Where are my messages and files stored?</summary>
+            <p>On your devices and your friends' devices, nowhere else. Rooms are kept by their members: a message sent while someone is offline is passed on by the others.</p>
+          </details>
+          <details>
+            <summary>Can I use it on my phone and my computer?</summary>
+            <p>Yes, but an identity lives on one device at a time. The encrypted backup lets you move it from one device to another.</p>
+          </details>
+          <details>
+            <summary>How do I report a bug or suggest something?</summary>
+            <p>Open an issue on <a href="https://github.com/Elendil-5Mart1/JungleMesh/issues">GitHub</a>. For a security problem, follow the security page instead of posting it publicly.</p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <!--& Footer -->
+    <footer class="footer">
+      <div class="footer__inner wrap">
+        <a class="brand" href="#top">
+          <img src="./icon.svg" alt="" width="22" height="22" />
+          <span>JungleMesh</span>
+        </a>
+        <nav class="footer__links" aria-label="Project">
+          <a href="https://github.com/Elendil-5Mart1/JungleMesh">Source code</a>
+          <a href="https://github.com/Elendil-5Mart1/JungleMesh/releases">Releases</a>
+          <a href="https://github.com/Elendil-5Mart1/JungleMesh/blob/main/SECURITY.md">Security</a>
+          <a href="https://github.com/Elendil-5Mart1/JungleMesh/blob/main/LICENSE">MIT license</a>
+        </nav>
+        <p class="footer__note">This page has no cookies and no analytics. Download links are read from GitHub.</p>
+      </div>
+    </footer>
+  </body>
+</html>

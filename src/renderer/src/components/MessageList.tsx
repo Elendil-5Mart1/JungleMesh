@@ -146,7 +146,7 @@ const MessageRow = memo(({ m, grouped, name, avatar, mine, myKey, deletable, edi
             {t('message.edited')}
           </span>
         )}
-        {m.text && !editing && <Embeds text={m.text} />}
+        {m.text && !editing && <Embeds text={m.text} thumbs={m.thumbs} />}
         {m.file && <FileCard file={m.file} ts={m.ts} ttlHours={ttlHours} convId={convId} mine={mine} />}
         {reactions.length > 0 && (
           <div className="reactions">

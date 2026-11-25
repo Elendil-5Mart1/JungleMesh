@@ -1,0 +1,12 @@
+//* Landing page styles (same structure as the app: abstracts / base / layout / components)
+@use 'base/base';
+
+@use 'layout/topbar';
+@use 'layout/hero';
+@use 'layout/sections';
+@use 'layout/footer';
+
+@use 'components/btn';
+@use 'components/mock';
+@use 'components/downloads';
+@use 'components/faq';

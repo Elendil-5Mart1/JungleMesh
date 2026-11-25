@@ -1,0 +1,17 @@
+{
+  "name": "junglemesh-site",
+  "private": true,
+  "description": "Landing page of JungleMesh (GitHub Pages)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "sass": "^1.108.2",
+    "vite": "^8.3.8"
+  }
+}

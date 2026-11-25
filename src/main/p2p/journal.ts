@@ -1,6 +1,7 @@
 //* Common tools for Hypercore logs (private messages AND rooms)
-import type { Avatar, CallEvent, ChannelKind, ChatMessage } from '../../shared/types'
+import type { Avatar, CallEvent, ChannelKind, ChatMessage, Thumbs } from '../../shared/types'
 import { isEmoji, type Annotation } from '../../shared/annotations'
+import { MAX_THUMBS, YT_ID } from '../../shared/embeds'
 
 const CALL_EVENTS: CallEvent[] = ['declined']
 
@@ -17,7 +18,7 @@ export const MAX_IMAGE_PIXELS = 40_000_000 // an image shown in the chat: refuse
 // Other members only write messages in their own log, plus two requests to the creator:
 // 'join' (sign up a friend I invited) and 'leave' (I am leaving the room).
 export type JournalEntry =
-  | { type?: 'msg'; id: string; text: string; ts: number; channel?: string; file?: SharedFile }
+  | { type?: 'msg'; id: string; text: string; ts: number; channel?: string; file?: SharedFile; thumbs?: Thumbs }
   | { type: 'call'; id: string; event: CallEvent; ts: number } // DM call event, shown as a system line
   | { type: 'meta'; name?: string; avatar?: Avatar; imageTtl?: number | null; ts: number }
   | { type: 'member'; key: string; core: string; name: string; ts: number }
@@ -128,6 +129,25 @@ export const cleanAvatar = (raw: unknown): Avatar | undefined => {
   return raw
 }
 
+//& YouTube thumbnails attached by the sender (0.4.1): video id → JPEG in base64
+// The SENDER downloads them (mqdefault, 320×180) so that the recipients never contact YouTube just to see
+// what a link is. Same distrust as an avatar: JPEG only, small, dimensions read from the header.
+// Older versions ignore the field (toMessage only keeps the fields it knows).
+const MAX_THUMB_LENGTH = 60_000 // ~45 KB of JPEG: a mqdefault weighs 10-20 KB
+const MAX_THUMB_SIDE = 640
+const THUMB = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/
+export const cleanThumbs = (raw: unknown): Thumbs | undefined => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: Thumbs = {}
+  for (const [id, img] of Object.entries(raw).slice(0, MAX_THUMBS)) {
+    if (!YT_ID.test(id) || typeof img !== 'string' || img.length > MAX_THUMB_LENGTH || !THUMB.test(img)) continue
+    const size = imageSize(Buffer.from(img.slice(img.indexOf(',') + 1), 'base64'))
+    if (!size || size.w < 1 || size.h < 1 || size.w > MAX_THUMB_SIDE || size.h > MAX_THUMB_SIDE) continue
+    out[id] = img
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
 // Channel id: short, without odd characters
 export const cleanChannelId = (raw: unknown): string | undefined =>
   typeof raw === 'string' && /^[a-z0-9-]{1,64}$/.test(raw) ? raw : undefined
@@ -170,7 +190,7 @@ export const readRaw = async (core: any, from = 0): Promise<unknown[]> => {
 //& Turns a raw entry into a displayable message (or null if it is not one)
 // We never trust the content: every field is validated.
 export const toMessage = (raw: unknown, author: string): ChatMessage | null => {
-  const entry = raw as Partial<{ type: string; id: string; text: string; ts: number; channel: string; file: unknown; event: unknown }> | null
+  const entry = raw as Partial<{ type: string; id: string; text: string; ts: number; channel: string; file: unknown; thumbs: unknown; event: unknown }> | null
   // Call event ("X declined the call"): a system line, its author is the log's owner
   if (entry?.type === 'call') {
     if (typeof entry.id !== 'string' || !CALL_EVENTS.includes(entry.event as CallEvent)) return null
@@ -185,11 +205,14 @@ export const toMessage = (raw: unknown, author: string): ChatMessage | null => {
     if (knownFiles.size >= MAX_KNOWN_FILES) knownFiles.delete(knownFiles.keys().next().value as string)
     knownFiles.set(file.core, { ...file, author, id: entry.id.slice(0, 64) })
   }
+  // A bad thumbnail is only dropped: the message itself stays readable
+  const thumbs = cleanThumbs(entry.thumbs)
   return {
     id: entry.id.slice(0, 64),
     from: author, // the author = the log's owner (signed), never a field of the message
     text: entry.text.slice(0, MAX_MESSAGE_LENGTH),
     ...(file && { file: { ...file, image: IMAGE_MIMES.includes(file.mime) } }),
+    ...(thumbs && { thumbs }),
     ts: Number.isFinite(entry.ts) ? (entry.ts as number) : 0,
     channel: cleanChannelId(entry.channel) // undefined = 'general' (or DM)
   }

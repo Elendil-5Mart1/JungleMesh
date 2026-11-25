@@ -1,0 +1,234 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Sections of the page
+.section {
+  padding-top: $space * 12;
+
+  &__title {
+    margin-top: $space;
+    font-size: clamp(1.7rem, 3.5vw, 2.4rem);
+    letter-spacing: -0.01em;
+  }
+
+  &__lead {
+    max-width: 40em;
+    margin-top: $space * 1.5;
+    color: $text-muted;
+    font-size: 1.06rem;
+  }
+}
+
+//& The basics: three columns under the hero
+.basics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: $space * 2;
+
+  @include below($bp-tablet) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.basic {
+  @include cut-card;
+  padding: $space * 3;
+
+  .icon {
+    width: 26px;
+    height: 26px;
+    color: $accent;
+  }
+
+  h2 {
+    margin: $space * 1.5 0 $space;
+    font-size: 1.15rem;
+  }
+
+  p {
+    color: $text-muted;
+  }
+}
+
+//& Creative features: a grid where the first card spans the whole width
+.features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $space * 2;
+  margin-top: $space * 5;
+
+  @include below($bp-tablet) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feature {
+  @include cut-card;
+  padding: $space * 3;
+  transition: border-color 0.2s;
+
+  &:hover {
+    border-color: rgba($accent, 0.5);
+  }
+
+  .icon {
+    width: 24px;
+    height: 24px;
+    color: $accent;
+  }
+
+  h3 {
+    margin: $space * 1.5 0 $space;
+    font-size: 1.1rem;
+  }
+
+  p {
+    color: $text-muted;
+  }
+
+  // The main argument: wider, with a magenta edge (the app's "attention" color)
+  &--wide {
+    grid-column: 1 / -1;
+    border-left: 3px solid $danger;
+
+    h3 {
+      font-size: 1.35rem;
+    }
+
+    .icon {
+      color: $danger;
+    }
+  }
+}
+
+//& Lists with an icon (crew)
+.list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $space * 2 $space * 4;
+  margin-top: $space * 4;
+  list-style: none;
+
+  @include below($bp-tablet) {
+    grid-template-columns: 1fr;
+  }
+
+  li {
+    display: flex;
+    gap: $space * 1.5;
+    color: $text-muted;
+  }
+
+  b {
+    color: $text;
+    font-weight: 600;
+  }
+
+  .icon {
+    margin-top: 3px;
+    color: $accent;
+  }
+}
+
+//& Get started: numbered steps
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: $space * 2;
+  margin-top: $space * 4;
+  list-style: none;
+  counter-reset: step;
+
+  @include below($bp-tablet) {
+    grid-template-columns: 1fr;
+  }
+
+  li {
+    @include cut-card;
+    padding: $space * 3;
+    counter-increment: step;
+
+    &::before {
+      content: '0' counter(step);
+      color: $accent;
+      font-family: $font-mono;
+      font-size: 0.85rem;
+    }
+  }
+
+  h3 {
+    margin: $space 0;
+    font-size: 1.1rem;
+  }
+
+  p {
+    color: $text-muted;
+  }
+}
+
+//& Privacy: what you get / what peer to peer means
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: $space * 2;
+  margin-top: $space * 4;
+
+  @include below($bp-tablet) {
+    grid-template-columns: 1fr;
+  }
+
+  &__col {
+    @include cut-card;
+    padding: $space * 3;
+
+    h3 {
+      margin-bottom: $space * 2;
+      font-size: 1.1rem;
+    }
+
+    &--honest {
+      border-top: 2px solid $warn;
+    }
+  }
+
+  ul {
+    display: flex;
+    flex-direction: column;
+    gap: $space * 1.5;
+    list-style: none;
+  }
+
+  li {
+    position: relative;
+    padding-left: $space * 3;
+    color: $text-muted;
+
+    b {
+      color: $text;
+      font-weight: 600;
+    }
+
+    &::before {
+      position: absolute;
+      left: 0;
+      font-family: $font-mono;
+    }
+  }
+
+  .checks li::before {
+    content: '+';
+    color: $accent;
+  }
+
+  .caveats li::before {
+    content: '!';
+    left: 4px;
+    color: $warn;
+  }
+
+  .more {
+    display: inline-block;
+    margin-top: $space * 2.5;
+    font-size: 0.93rem;
+  }
+}

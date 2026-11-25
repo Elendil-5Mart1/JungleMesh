@@ -10,6 +10,7 @@ import { findInviteCode, SCHEME } from './inviteLink'
 import { createSettings } from './settings'
 import { createTray } from './tray'
 import { startUpdater } from './updater'
+import { thumbsOf } from './thumbs'
 import { setupSpellcheck } from './textMenu'
 import { scrypt as nodeScrypt } from 'node:crypto'
 import {
@@ -295,8 +296,9 @@ ipcMain.handle('rooms:invite', (_e, room: string, friend: string) => core.invite
 ipcMain.handle('rooms:accept', (_e, room: string) => core.acceptRoomInvite(asKey(room)))
 ipcMain.handle('rooms:decline', (_e, room: string) => core.declineRoomInvite(asKey(room)))
 ipcMain.handle('chat:history', (_e, convId: string) => core.getHistory(asKey(convId)))
-ipcMain.handle('chat:send', (_e, convId: string, text: string, channel?: string) =>
-  core.send(asKey(convId), text, channel)
+// The YouTube thumbnails of the message are downloaded first (a few hundred ms, 3 s at most: see thumbs.ts)
+ipcMain.handle('chat:send', async (_e, convId: string, text: string, channel?: string) =>
+  core.send(asKey(convId), text, channel, undefined, await thumbsOf(String(text)))
 )
 //& Files and images. The main process does the disk work: the page never sees a path.
 // Attachment staged in the input (picked, pasted or dropped), sent with the optional text of the message.

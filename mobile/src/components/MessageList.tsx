@@ -13,6 +13,7 @@ import { EmojiPicker } from './EmojiPicker'
 import { FileCard } from './FileCard'
 import { Icon } from './Icon'
 import { Markdown } from './Markdown'
+import { YouTubeThumbs } from './YouTubeThumbs'
 import { ActionSheet, Prompt, type PromptSpec, type SheetSpec } from './Sheet'
 import { colors, radius, space } from '../theme'
 
@@ -61,6 +62,7 @@ const Bubble = ({ msg, author, mine, myKey, header, convKey, imageTtlHours, onLo
         </Text>
       )}
       {!!msg.text && <Markdown text={msg.text} style={styles.text} />}
+      {!!msg.text && <YouTubeThumbs text={msg.text} thumbs={msg.thumbs} onLongPress={() => onLongPress(msg)} />}
       {!!msg.file && (
         <FileCard
           file={msg.file}

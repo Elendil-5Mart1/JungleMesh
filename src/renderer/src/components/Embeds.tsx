@@ -2,11 +2,14 @@
 // Without a server in between, showing a player reveals OUR IP to the platform (even without playing):
 // by default the card only shows the link and a "play" button, the player loads on click.
 // Settings › Privacy › "Load players automatically" loads them straight away (without autoplay).
+// YouTube thumbnail: downloaded by the SENDER and carried by the message (ChatMessage.thumbs, see
+// main/thumbs.ts), so showing it contacts nobody. Messages without it (older versions) keep the plain card.
 import { memo, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCoreStore } from '@/stores/useCoreStore'
 import { Icon } from '@/components/Icon'
-import { embedsOf, PROVIDER_NAMES, type Embed } from '@/utils/embeds'
+import { embedsOf, PROVIDER_NAMES, type Embed } from '../../../shared/embeds'
+import type { Thumbs } from '../../../shared/types'
 
 // Link shown on the card: without https:// and www., cut if too long
 const shortLink = (url: string): string => {
@@ -15,7 +18,7 @@ const shortLink = (url: string): string => {
 }
 
 //& One player
-const EmbedCard = ({ embed, auto }: { embed: Embed; auto: boolean }) => {
+const EmbedCard = ({ embed, auto, thumb }: { embed: Embed; auto: boolean; thumb?: string }) => {
   const { t } = useTranslation()
   // null = not loaded; otherwise "clicked" (autoplay) or loaded by the setting (no autoplay)
   const [loaded, setLoaded] = useState<'clicked' | 'auto' | null>(auto ? 'auto' : null)
@@ -52,27 +55,38 @@ const EmbedCard = ({ embed, auto }: { embed: Embed; auto: boolean }) => {
           referrerPolicy="strict-origin-when-cross-origin"
         />
       ) : (
-        <button type="button" className="embed__play" onClick={() => setLoaded('clicked')}>
-          <Icon name="play" size={18} />
-          <span>
-            <strong>{t('embed.play')}</strong>
-            <small>{t('embed.privacy', { name })}</small>
-          </span>
-        </button>
+        <>
+          {thumb && (
+            // Same action as the button below; the button keeps the explanation, so the image is not announced twice
+            <button type="button" className="embed__thumb" onClick={() => setLoaded('clicked')} tabIndex={-1} aria-hidden>
+              <img src={thumb} alt="" draggable={false} />
+              <span className="embed__thumb-play">
+                <Icon name="play" size={28} />
+              </span>
+            </button>
+          )}
+          <button type="button" className="embed__play" onClick={() => setLoaded('clicked')}>
+            <Icon name="play" size={18} />
+            <span>
+              <strong>{t('embed.play')}</strong>
+              <small>{t('embed.privacy', { name })}</small>
+            </span>
+          </button>
+        </>
       )}
     </div>
   )
 }
 
 // memo: the links are only searched again when the text changes (an edit), not on every render of the row
-export const Embeds = memo(({ text }: { text: string }) => {
+export const Embeds = memo(({ text, thumbs }: { text: string; thumbs?: Thumbs }) => {
   const auto = useCoreStore((s) => !!s.settings?.autoEmbeds)
   const embeds = useMemo(() => embedsOf(text), [text])
   if (embeds.length === 0) return null
   return (
     <div className="embeds">
       {embeds.map((e) => (
-        <EmbedCard key={e.src} embed={e} auto={auto} />
+        <EmbedCard key={e.src} embed={e} auto={auto} thumb={e.videoId ? thumbs?.[e.videoId] : undefined} />
       ))}
     </div>
   )

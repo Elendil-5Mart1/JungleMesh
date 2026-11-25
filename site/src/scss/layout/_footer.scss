@@ -1,0 +1,38 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+//* Footer
+.footer {
+  margin-top: $space * 12;
+  padding: $space * 5 0;
+  border-top: 1px solid $line;
+  color: $text-muted;
+  font-size: 0.9rem;
+
+  &__inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: $space * 2 $space * 4;
+  }
+
+  &__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $space * 3;
+
+    a {
+      color: $text-muted;
+
+      &:hover {
+        color: $text;
+      }
+    }
+  }
+
+  &__note {
+    flex-basis: 100%;
+    color: $text-dim;
+    font-size: 0.85rem;
+  }
+}
