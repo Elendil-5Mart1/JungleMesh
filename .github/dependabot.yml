@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # koffi 3 downloads its binary in an install script (blocked by allowScripts); 2.x ships it in the package
+      - dependency-name: koffi
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
